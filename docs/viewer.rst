@@ -35,7 +35,9 @@ Default Sampling
 ----------------
 
 The default node query randomly samples up to 20,000 nodes with stored
-coordinate properties. Change the first line to load a smaller or larger sample:
+coordinate properties. This is only the browser/API sample size; it does not
+limit how many nodes can be stored in Neo4j. Change the first line to load a
+smaller or larger sample:
 
 .. code-block:: cypher
 
@@ -43,6 +45,29 @@ coordinate properties. Change the first line to load a smaller or larger sample:
 
 The vertex slider controls how many loaded nodes are drawn. It does not fetch
 more data from Neo4j. The Cypher sample size controls what is loaded.
+
+Large Viewer Requests
+---------------------
+
+The viewer returns one JSON payload containing loaded nodes, known coordinate
+pairs, and relationships among the loaded nodes. Very large samples may require
+more Neo4j heap and more browser memory. For example, the full 70,000-node
+MNIST graph can be stored and laid out in Neo4j, while the default viewer query
+loads 20,000 nodes to keep the first render responsive.
+
+To request all 70,000 MNIST nodes, edit the node query:
+
+.. code-block:: cypher
+
+   WITH 70000 AS sampleSize
+
+If the response fails or the browser becomes slow, lower ``sampleSize`` or raise
+Neo4j heap:
+
+.. code-block:: properties
+
+   server.memory.heap.initial_size=4G
+   server.memory.heap.max_size=8G
 
 Custom Node Query
 -----------------

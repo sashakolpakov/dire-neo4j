@@ -141,7 +141,8 @@ MNIST Loader
 ------------
 
 The repository includes a MNIST loader that creates the graph topology, loads it
-through Neo4j's HTTP transaction endpoint, and writes DiRe coordinates.
+through Neo4j's HTTP transaction endpoint, and writes DiRe coordinates. The
+standard MNIST files contain 60,000 training images and 10,000 test images.
 
 Download the train and test files:
 
@@ -159,7 +160,7 @@ Download the train and test files:
    curl -L -o .tmp/mnist/t10k-labels-idx1-ubyte.gz \
      https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz
 
-Load a larger sample:
+Load a 20,000-image working graph:
 
 .. code-block:: sh
 
@@ -169,21 +170,23 @@ Load a larger sample:
      --samples 20000 \
      --layout-runs all
 
-Load the full 70,000-image train+test set:
+Load the full 70,000-image train+test graph:
 
 .. code-block:: sh
 
    python3 examples/mnist/load_mnist_graph.py \
      --endpoint http://127.0.0.1:7474/db/neo4j/tx/commit \
      --mnist-dir .tmp/mnist \
-     --full \
      --split all \
+     --full \
      --neighbor-mode clustered \
-     --layout-runs wide
+     --layout-runs all
 
 The loader stores MNIST items as ``:Paper:MNIST`` nodes, nearest-neighbor links
 as weighted ``:CITES`` relationships, and cross-digit links as
-``kind: 'bridge'``.
+``kind: 'bridge'``. For large samples, ``--neighbor-mode auto`` switches from
+exact kNN to clustered approximate kNN; use ``--neighbor-mode clustered``
+explicitly for the full set.
 
 Preflight Checks
 ----------------

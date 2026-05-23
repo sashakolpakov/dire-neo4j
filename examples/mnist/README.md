@@ -1,7 +1,8 @@
 # MNIST Example
 
 This example loads MNIST as a weighted k-nearest-neighbor graph, writes DiRe
-coordinates, and prepares the `/dire/` viewer metadata.
+coordinates, and prepares the `/dire/` viewer metadata. The canonical MNIST
+files contain 60,000 training images and 10,000 test images.
 
 Download the train and test files:
 
@@ -19,7 +20,7 @@ curl -L -o .tmp/mnist/t10k-labels-idx1-ubyte.gz \
   https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz
 ```
 
-Load a larger working sample:
+Load a 20,000-image working graph:
 
 ```sh
 python3 examples/mnist/load_mnist_graph.py \
@@ -29,16 +30,16 @@ python3 examples/mnist/load_mnist_graph.py \
   --layout-runs all
 ```
 
-Load the full 70,000-image train+test set:
+Load the full 70,000-image train+test graph:
 
 ```sh
 python3 examples/mnist/load_mnist_graph.py \
   --endpoint http://127.0.0.1:7474/db/neo4j/tx/commit \
   --mnist-dir .tmp/mnist \
-  --full \
   --split all \
+  --full \
   --neighbor-mode clustered \
-  --layout-runs wide
+  --layout-runs all
 ```
 
 The loader stores:
@@ -49,6 +50,7 @@ The loader stores:
 - `dire_initial_*`, `dire_*`, and `dire_wide_*` coordinates depending on `--layout-runs`.
 
 `--neighbor-mode auto` uses exact kNN up to `--exact-threshold` nodes and
-clustered approximate kNN above that. The viewer still starts with a manageable
-sample query; edit its first Cypher line, for example `WITH 10000 AS sampleSize`,
-to draw more loaded nodes.
+clustered approximate kNN above that. The viewer default loads a 20,000-node
+random sample from the stored graph. Edit the first node-query line, for example
+`WITH 70000 AS sampleSize`, to request all MNIST nodes; for that size, increase
+Neo4j heap if the response is too large for the default server settings.

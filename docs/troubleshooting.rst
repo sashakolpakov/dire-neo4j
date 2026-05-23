@@ -44,6 +44,28 @@ Check:
 If this returns zero, run ``dire.layout.write`` first or edit the viewer node
 query to use the coordinate properties you have.
 
+Large Viewer Request Fails
+--------------------------
+
+The viewer loads one JSON payload containing nodes, coordinate sets, and visible
+relationships. If a large request fails, first lower the first line of the node
+query:
+
+.. code-block:: cypher
+
+   WITH 20000 AS sampleSize
+
+For larger samples, raise Neo4j heap and restart the server:
+
+.. code-block:: properties
+
+   server.memory.heap.initial_size=4G
+   server.memory.heap.max_size=8G
+
+The graph can be larger than the viewer sample. For example, the MNIST loader
+can store the full 70,000-node graph while the viewer initially displays a
+20,000-node random sample.
+
 Layout Projection Fails
 -----------------------
 

@@ -19,6 +19,7 @@ The intended workflow is:
 ```text
 java-core/      primitive-array layout engine
 neo4j-plugin/   Neo4j procedures and /dire/ viewer
+examples/       dataset loaders and runnable examples
 benchmarks/     benchmark harness placeholder
 docs/           Sphinx docs and usage notes
 ```
@@ -184,8 +185,8 @@ is to compute a k-nearest-neighbor graph outside Neo4j, then load one node per
 item and one weighted relationship per neighbor pair. Use a categorical property
 such as `group` or `digit` for viewer colors.
 
-The repository includes a MNIST loader that can use the full 70,000-image
-train+test set:
+The repository includes a MNIST loader that builds a k-nearest-neighbor graph
+from the standard 70,000-image MNIST train+test set.
 
 ```sh
 python3 -m pip install numpy scikit-learn
@@ -199,7 +200,11 @@ curl -L -o .tmp/mnist/t10k-images-idx3-ubyte.gz \
   https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte.gz
 curl -L -o .tmp/mnist/t10k-labels-idx1-ubyte.gz \
   https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz
+```
 
+Load a 20,000-image working graph:
+
+```sh
 python3 examples/mnist/load_mnist_graph.py \
   --endpoint http://127.0.0.1:7474/db/neo4j/tx/commit \
   --mnist-dir .tmp/mnist \
@@ -207,14 +212,21 @@ python3 examples/mnist/load_mnist_graph.py \
   --layout-runs all
 ```
 
-For the complete MNIST set, replace `--samples 20000` with:
+Load the full 70,000-image graph:
 
 ```sh
---full --split all --neighbor-mode clustered
+python3 examples/mnist/load_mnist_graph.py \
+  --endpoint http://127.0.0.1:7474/db/neo4j/tx/commit \
+  --mnist-dir .tmp/mnist \
+  --split all \
+  --full \
+  --neighbor-mode clustered \
+  --layout-runs all
 ```
 
 The example writes `:Paper:MNIST` nodes, weighted `:CITES` edges, bridge-edge
-metadata, and DiRe coordinate properties for the viewer.
+metadata, and DiRe coordinate properties for the viewer. For large samples,
+`--neighbor-mode auto` switches from exact kNN to clustered approximate kNN.
 
 ## Run A Layout
 
@@ -286,10 +298,20 @@ http://localhost:7474/dire/
 ```
 
 The default viewer query randomly samples up to 20,000 coordinate-bearing nodes.
+This is a browser/API sample from the stored graph, not a database-size limit.
 Edit the first line in the node query to load a smaller or larger sample:
 
 ```cypher
 WITH 70000 AS sampleSize
+```
+
+Rendering all 70,000 MNIST nodes sends a large JSON response from Neo4j to the
+browser. If that request fails, lower `sampleSize` or raise Neo4j heap, for
+example:
+
+```properties
+server.memory.heap.initial_size=4G
+server.memory.heap.max_size=8G
 ```
 
 The viewer uses:
