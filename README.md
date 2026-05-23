@@ -1,24 +1,31 @@
 # dire-neo4j
 
-Neo4j plugin for DiRe graph layouts.
+Neo4j server plugin for DiRe graph layouts.
 
-`dire-neo4j` projects a graph from Cypher, builds CSR adjacency from Neo4j
-relationships, computes a spectral initialization, runs DiRe attraction and
-repulsion kernels, and writes layout coordinates back to nodes. It also ships an
-unmanaged `/dire/` viewer for coordinate-faithful validation.
+`dire-neo4j` projects a graph from Cypher, builds a primitive-array CSR
+adjacency, computes a spectral initialization, runs DiRe attraction/repulsion
+kernels, and writes layout coordinates back to Neo4j nodes. It also ships a
+small unmanaged `/dire/` viewer served by the same Neo4j server.
 
-## Modules
+The intended workflow is:
+
+1. Load or keep your dataset in a normal Neo4j database.
+2. Choose the node and relationship projection with Cypher.
+3. Run `dire.layout.write`.
+4. Open `/dire/` to inspect the stored coordinates.
+
+## Repository Layout
 
 ```text
 java-core/      primitive-array layout engine
 neo4j-plugin/   Neo4j procedures and /dire/ viewer
 benchmarks/     benchmark harness placeholder
-docs/           usage notes
+docs/           Sphinx docs and usage notes
 ```
 
 ## Build
 
-Java 21 is required.
+Java 21 is recommended for current Neo4j releases.
 
 ```sh
 export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
@@ -28,21 +35,22 @@ mvn test
 mvn package
 ```
 
-The plugin jar is written to:
+The server plugin jar is written to:
 
 ```text
 neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar
 ```
 
-## Install
+## Install Into A Normal Neo4j Server
 
-Copy the jar into Neo4j's plugin directory:
+Stop Neo4j, copy the jar into the server plugin directory, configure Neo4j, and
+restart.
 
 ```sh
 cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar "$NEO4J_HOME/plugins/"
 ```
 
-Enable procedures and the viewer in `neo4j.conf`:
+Add to `neo4j.conf`:
 
 ```properties
 dbms.security.procedures.unrestricted=dire.*
@@ -50,15 +58,32 @@ dbms.security.procedures.allowlist=dire.*
 server.unmanaged_extension_classes=org.dire.neo4j.plugin=/dire
 ```
 
-Restart Neo4j. The viewer is then available at:
+Restart Neo4j and verify the procedures:
+
+```cypher
+SHOW PROCEDURES
+YIELD name
+WHERE name STARTS WITH 'dire.'
+RETURN name
+ORDER BY name;
+```
+
+Expected:
+
+```text
+dire.layout.estimate
+dire.layout.stats
+dire.layout.stream
+dire.layout.write
+```
+
+The viewer is available on the same HTTP port as Neo4j:
 
 ```text
 http://localhost:7474/dire/
 ```
 
-## Local Neo4j From Scratch
-
-On macOS with Homebrew:
+## Homebrew Neo4j Example
 
 ```sh
 brew install openjdk@21 neo4j
@@ -67,32 +92,115 @@ export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
 export PATH="$JAVA_HOME/bin:$PATH"
 
 mvn package
-cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar "$(brew --prefix neo4j)/libexec/plugins/"
+cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
+  "$(brew --prefix neo4j)/libexec/plugins/"
 ```
 
-Add the `neo4j.conf` settings from [Install](#install), then start Neo4j:
+Edit:
+
+```text
+$(brew --prefix neo4j)/libexec/conf/neo4j.conf
+```
+
+Add the three `neo4j.conf` settings from the install section, then start:
 
 ```sh
 NEO4J_CONF="$(brew --prefix neo4j)/libexec/conf" neo4j console
 ```
 
-Open `http://localhost:7474/dire/`.
+## Docker Example
 
-For a complete installation and first-layout walkthrough, see
-[docs/neo4j-users.md](docs/neo4j-users.md).
+```sh
+docker run --rm \
+  --name dire-neo4j \
+  -p 7474:7474 -p 7687:7687 \
+  -v "$PWD/neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar:/plugins/dire-neo4j-plugin.jar" \
+  -e NEO4J_AUTH=neo4j/password \
+  -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
+  -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
+  -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
+  neo4j:latest
+```
 
-## Run DiRe On A Loaded Graph
+Pin the Neo4j image version for repeatable production deployments.
 
-After loading data into Neo4j, call `dire.layout.write` with a node projection
-and a relationship projection. The only required columns are numeric Neo4j node
-ids.
+## Ingest A Dataset
+
+DiRe works on graph topology already stored in Neo4j. For a graph dataset, load
+nodes and relationships with the standard Neo4j tools: `LOAD CSV`,
+`neo4j-admin database import`, APOC, a driver script, or Neo4j Browser.
+
+Example CSV shape:
+
+```text
+papers.csv
+paper_id,title,category
+p1,Graph embeddings,ML
+p2,Layout algorithms,Visualization
+p3,Citation networks,Networks
+
+cites.csv
+source,target,weight,kind
+p1,p2,1.0,local
+p1,p3,0.4,bridge
+p3,p2,0.8,local
+```
+
+Place the CSV files in Neo4j's configured import directory, then run:
+
+```cypher
+CREATE CONSTRAINT paper_id IF NOT EXISTS
+FOR (p:Paper) REQUIRE p.paperId IS UNIQUE;
+
+LOAD CSV WITH HEADERS FROM 'file:///papers.csv' AS row
+MERGE (p:Paper {paperId: row.paper_id})
+SET p.title = row.title,
+    p.name = coalesce(row.title, row.paper_id),
+    p.group = coalesce(row.category, 'Paper');
+
+LOAD CSV WITH HEADERS FROM 'file:///cites.csv' AS row
+MATCH (a:Paper {paperId: row.source})
+MATCH (b:Paper {paperId: row.target})
+MERGE (a)-[r:CITES]->(b)
+SET r.weight = CASE
+      WHEN row.weight IS NULL OR row.weight = '' THEN 1.0
+      ELSE toFloat(row.weight)
+    END,
+    r.kind = CASE
+      WHEN row.kind IS NULL OR row.kind = '' THEN 'local'
+      ELSE row.kind
+    END;
+```
+
+Check the graph before running the layout:
+
+```cypher
+MATCH (p:Paper) RETURN count(p) AS nodes;
+MATCH (:Paper)-[r:CITES]->(:Paper) RETURN count(r) AS relationships;
+```
+
+For vector datasets such as MNIST, create graph topology first. A common pattern
+is to compute a k-nearest-neighbor graph outside Neo4j, then load one node per
+item and one weighted relationship per neighbor pair. Use a categorical property
+such as `group` or `digit` for viewer colors.
+
+## Run A Layout
+
+`dire.layout.write` reads a Cypher projection. The node query must return
+Neo4j node ids as `id`. The relationship query must return endpoint ids as
+`source` and `target`; `weight` is optional.
 
 ```cypher
 CALL dire.layout.write({
-  nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
+  nodeQuery: '
+    MATCH (n:Paper)
+    RETURN id(n) AS id
+  ',
   relationshipQuery: '
     MATCH (a:Paper)-[r:CITES]->(b:Paper)
-    RETURN id(a) AS source, id(b) AS target, coalesce(r.weight, 1.0) AS weight
+    RETURN id(a) AS source,
+           id(b) AS target,
+           coalesce(r.weight, 1.0) AS weight
   ',
   writeProperties: ['dire_x', 'dire_y'],
   writeInitialProperties: ['dire_initial_x', 'dire_initial_y'],
@@ -104,19 +212,83 @@ YIELD nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdg
 RETURN nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength;
 ```
 
-The query above writes:
+The procedure writes:
 
-- `dire_x`, `dire_y`: final DiRe coordinates
-- `dire_initial_x`, `dire_initial_y`: initial coordinates before DiRe refinement
+- `dire_x`, `dire_y`: final DiRe coordinates.
+- `dire_initial_x`, `dire_initial_y`: initialization coordinates.
 
-Open the viewer after the procedure finishes:
+## Add A Wider Variant
+
+The viewer recognizes `dire_wide_x` and `dire_wide_y` as a second layout option.
+Use this for stronger separation experiments:
+
+```cypher
+CALL dire.layout.write({
+  nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
+  relationshipQuery: '
+    MATCH (a:Paper)-[r:CITES]->(b:Paper)
+    RETURN id(a) AS source, id(b) AS target, coalesce(r.weight, 1.0) AS weight
+  ',
+  initialization: 'warm_start',
+  warmStartProperties: ['dire_initial_x', 'dire_initial_y'],
+  writeProperties: ['dire_wide_x', 'dire_wide_y'],
+  writeInitialProperties: [],
+  iterations: 300,
+  negativeSamples: 32,
+  attractionStrength: 0.8,
+  repulsionStrength: 2.0,
+  spread: 1.6,
+  randomSeed: 77,
+  concurrency: 8
+})
+YIELD nodesWritten, relationshipsRead, milliseconds, stress, meanEdgeLength
+RETURN nodesWritten, relationshipsRead, milliseconds, stress, meanEdgeLength;
+```
+
+## View The Result
+
+Open:
 
 ```text
 http://localhost:7474/dire/
 ```
 
-The viewer reads stored coordinates directly from Neo4j. Use its Cypher panel to
-change labels, groups, coordinate columns, and graph scope.
+The default viewer query randomly samples up to 1,000 coordinate-bearing nodes.
+Edit the first line in the node query to load a different sample size:
+
+```cypher
+WITH 4000 AS sampleSize
+```
+
+The viewer uses:
+
+- `name` or `title` for captions.
+- `group` or the first node label for color.
+- `kind: 'bridge'` for highlighted bridge edges.
+- Local edge and bridge edge toggles as separate layers.
+
+## Documentation
+
+Build the Sphinx docs locally:
+
+```sh
+python3 -m sphinx -b html docs docs/_build/html
+```
+
+Start at:
+
+```text
+docs/index.rst
+```
+
+The most complete installation and data ingestion guide is:
+
+```text
+docs/installation.rst
+docs/data-ingestion.rst
+docs/running-layouts.rst
+docs/viewer.rst
+```
 
 ## Procedures
 
@@ -126,14 +298,6 @@ Available procedures:
 - `dire.layout.write`: run the layout and write node properties.
 - `dire.layout.stats`: run the layout and return runtime/quality metrics.
 - `dire.layout.estimate`: estimate memory from query counts or explicit counts.
-
-Required projection columns:
-
-- `nodeQuery`: `id`
-- `relationshipQuery`: `source`, `target`
-- optional relationship weight: `weight`
-
-## Configuration
 
 Common layout options:
 
@@ -147,80 +311,3 @@ Common layout options:
 | `warmStartProperties` | `writeProperties` | used with `initialization: 'warm_start'` |
 | `negativeSamples` | `16` | sampled repulsion per node |
 | `concurrency` | `min(availableProcessors, 8)` | worker threads for force kernels |
-
-Warm-start example:
-
-```cypher
-CALL dire.layout.write({
-  nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
-  relationshipQuery: '
-    MATCH (a:Paper)-[:CITES]->(b:Paper)
-    RETURN id(a) AS source, id(b) AS target
-  ',
-  initialization: 'warm_start',
-  warmStartProperties: ['dire_x', 'dire_y'],
-  writeProperties: ['dire_x', 'dire_y'],
-  iterations: 50
-})
-YIELD nodesWritten, milliseconds
-RETURN nodesWritten, milliseconds;
-```
-
-## Viewer
-
-The `/dire/` viewer renders stored coordinate properties. It does not create a
-separate visualization graph.
-
-Default assumptions:
-
-- Nodes with `dire_x/dire_y`, `dire_initial_x/y`, `spectral_x/y`,
-  `dire_fast_x/y`, `dire_balanced_x/y`, or `dire_wide_x/y` are displayed.
-- Relationships between displayed nodes are displayed.
-- `name` or `title` is used as the caption when present.
-- `group` or the first node label is used for color categories.
-- `kind: 'bridge'` marks bridge edges; other edges are treated as local.
-
-The default viewer query randomly samples up to 1,000 coordinate-bearing nodes.
-The sample size is the `WITH 1000 AS sampleSize` line in the node Cypher. Edit
-that line, or replace the query, to load a different graph slice.
-
-Editable viewer queries use this contract:
-
-- node query: `idx`, `name`, `group`, and one or more coordinate pairs
-- edge query: `source`, `target`, optional `weight`, optional `kind`
-- `source` and `target` match node `idx`
-
-Use Cypher to choose graph size and scope. The vertex slider only changes how
-many already-loaded nodes and edges are drawn on screen.
-
-To compare a wider layout, run the same projection with a stronger repulsion
-and write it to `dire_wide_x/dire_wide_y`:
-
-```cypher
-CALL dire.layout.write({
-  nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
-  relationshipQuery: '
-    MATCH (a:Paper)-[r:CITES]->(b:Paper)
-    RETURN id(a) AS source, id(b) AS target, coalesce(r.weight, 1.0) AS weight
-  ',
-  writeProperties: ['dire_wide_x', 'dire_wide_y'],
-  writeInitialProperties: [],
-  repulsionStrength: 1.8,
-  iterations: 200,
-  randomSeed: 42,
-  concurrency: 8
-})
-YIELD nodesWritten, milliseconds
-RETURN nodesWritten, milliseconds;
-```
-
-## Estimate
-
-```cypher
-CALL dire.layout.estimate({
-  nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
-  relationshipQuery: 'MATCH (:Paper)-[:CITES]->(:Paper) RETURN 1 AS relationship'
-})
-YIELD nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax
-RETURN nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax;
-```
