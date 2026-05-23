@@ -8,6 +8,7 @@ let visibleCount = 1;
 let transform = { scale: 1, tx: 0, ty: 0 };
 let dragging = false;
 let last = null;
+let hudStatus = "";
 
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
@@ -31,6 +32,13 @@ function rect() {
 
 function colors() {
   return DATA ? DATA.colors : {};
+}
+
+function updateHud(nextStatus = null) {
+  if (nextStatus !== null) hudStatus = nextStatus;
+  if (!DATA || !current) return;
+  const m = DATA.metrics[current] || {};
+  hud.innerHTML = `<strong>${m.name || current}</strong><span>${hudStatus}</span>`;
 }
 
 function nodeScore(idx) {
@@ -302,6 +310,7 @@ function updateUi() {
   document.getElementById("loadedBadge").textContent = DATA.sourceNodes > DATA.totalNodes
     ? `sample: ${DATA.totalNodes.toLocaleString()} of ${DATA.sourceNodes.toLocaleString()}`
     : `loaded: ${DATA.totalNodes.toLocaleString()}`;
+  updateHud();
   document.getElementById("vertexOutput").textContent = visibleCount >= DATA.totalNodes
     ? `All ${DATA.totalNodes.toLocaleString()}`
     : visibleCount.toLocaleString();
@@ -343,7 +352,7 @@ function applyData(nextData, statusText) {
   nodeQuery.value = DATA.sample.nodeQuery;
   edgeQuery.value = DATA.sample.edgeQuery;
   queryStatus.textContent = "";
-  hud.innerHTML = `<strong>${DATA.metrics[current]?.name || current}</strong><span>${statusText}</span>`;
+  updateHud(statusText);
   const vertexControl = document.getElementById("vertexCount");
   vertexControl.max = Math.max(1, DATA.totalNodes);
   vertexControl.value = Math.max(1, DATA.totalNodes);

@@ -177,9 +177,9 @@ Default assumptions:
 - `group` or the first node label is used for color categories.
 - `kind: 'bridge'` marks bridge edges; other edges are treated as local.
 
-The default viewer query samples up to 1,000 coordinate-bearing nodes. The
-sample size is the `WITH 1000 AS sampleSize` line in the node Cypher. Edit that
-line, or replace the query, to load a different graph slice.
+The default viewer query randomly samples up to 1,000 coordinate-bearing nodes.
+The sample size is the `WITH 1000 AS sampleSize` line in the node Cypher. Edit
+that line, or replace the query, to load a different graph slice.
 
 Editable viewer queries use this contract:
 

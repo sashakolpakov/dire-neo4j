@@ -36,19 +36,9 @@ public class DireViewResource {
             MATCH (n)
             WHERE (n.dire_x IS NOT NULL AND n.dire_y IS NOT NULL)
             WITH sampleSize, count(n) AS sourceTotal, collect(n) AS candidates
-            WITH sampleSize, sourceTotal, candidates,
-                 CASE
-                   WHEN sourceTotal <= sampleSize THEN 1
-                   ELSE toInteger(ceil(toFloat(sourceTotal) / sampleSize)) * 2
-                 END AS period
-            WITH sampleSize, sourceTotal, candidates, period,
-                 CASE WHEN sourceTotal <= sampleSize THEN 1 ELSE 2 END AS keep,
-                 toInteger(floor(rand() * period)) AS offset
             UNWIND candidates AS n
-            WITH sampleSize, sourceTotal, period, keep, offset, n,
-                 coalesce(toIntegerOrNull(n.localIndex), id(n)) AS sampleKey
-            WHERE sourceTotal <= sampleSize OR ((sampleKey + offset) % period) < keep
-            ORDER BY coalesce(n.group, head(labels(n)), 'Graph'), coalesce(n.localIndex, id(n))
+            WITH sampleSize, sourceTotal, n, rand() AS draw
+            ORDER BY draw
             WITH sampleSize, sourceTotal, collect(n) AS sampled
             UNWIND sampled[..sampleSize] AS n
             RETURN id(n) AS idx,
