@@ -37,42 +37,17 @@ function nodeScore(idx) {
   return Math.abs(Math.sin(Number(idx) * 12.9898 + 78.233));
 }
 
-function bridgeScores() {
-  const scores = new Map();
-  if (!DATA) return scores;
-  for (const edge of DATA.edges) {
-    if (edge.kind !== "bridge") continue;
-    const score = Math.abs(Math.sin(Number(edge.source) * 12.9898 + Number(edge.target) * 78.233 + 37.719));
-    const sourceScore = scores.get(edge.source);
-    const targetScore = scores.get(edge.target);
-    if (sourceScore === undefined || score < sourceScore) scores.set(edge.source, score);
-    if (targetScore === undefined || score < targetScore) scores.set(edge.target, score);
-  }
-  return scores;
-}
-
 function selectionSet() {
   const baseRun = DATA.runs.dire ? "dire" : DATA.runs.spectral ? "spectral" : current;
   const base = DATA.runs[baseRun].nodes;
   if (visibleCount >= base.length) return new Set(base.map(n => n.idx));
   const groups = Object.keys(colors());
   const buckets = new Map(groups.map(group => [group, []]));
-  const bridges = bridgeScores();
   for (const node of base) {
     if (!buckets.has(node.group)) buckets.set(node.group, []);
     buckets.get(node.group).push(node);
   }
-  for (const nodes of buckets.values()) {
-    nodes.sort((a, b) => {
-      const aBridge = bridges.get(a.idx);
-      const bBridge = bridges.get(b.idx);
-      if ((aBridge === undefined) !== (bBridge === undefined)) {
-        return aBridge === undefined ? 1 : -1;
-      }
-      return (aBridge ?? nodeScore(a.idx)) - (bBridge ?? nodeScore(b.idx))
-        || nodeScore(a.idx) - nodeScore(b.idx);
-    });
-  }
+  for (const nodes of buckets.values()) nodes.sort((a, b) => nodeScore(a.idx) - nodeScore(b.idx));
   const selected = [];
   let offset = 0;
   while (selected.length < visibleCount) {
@@ -324,7 +299,7 @@ function updateUi() {
   document.getElementById("edgeLegendLocal").textContent = (edgeKinds.local || 0).toLocaleString();
   document.getElementById("edgeLegendBridge").textContent = (edgeKinds.bridge || 0).toLocaleString();
   document.getElementById("activeBadge").textContent = `active: ${DATA.activeRun}`;
-  document.getElementById("loadedBadge").textContent = `${DATA.totalNodes.toLocaleString()} nodes`;
+  document.getElementById("loadedBadge").textContent = `loaded: ${DATA.totalNodes.toLocaleString()}`;
   document.getElementById("vertexOutput").textContent = visibleCount >= DATA.totalNodes
     ? `All ${DATA.totalNodes.toLocaleString()}`
     : visibleCount.toLocaleString();
@@ -381,7 +356,7 @@ async function loadDefault() {
   const response = await fetch("./api/data", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || JSON.stringify(payload));
-  applyData(payload, `Default view loaded ${payload.totalNodes.toLocaleString()} nodes.`);
+  applyData(payload, `Default sample loaded ${payload.totalNodes.toLocaleString()} nodes and ${payload.totalEdges.toLocaleString()} edges.`);
 }
 
 async function runCypher() {

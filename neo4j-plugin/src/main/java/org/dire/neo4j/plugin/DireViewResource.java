@@ -39,26 +39,19 @@ public class DireViewResource {
                OR (n.dire_fast_x IS NOT NULL AND n.dire_fast_y IS NOT NULL)
                OR (n.dire_balanced_x IS NOT NULL AND n.dire_balanced_y IS NOT NULL)
                OR (n.dire_wide_x IS NOT NULL AND n.dire_wide_y IS NOT NULL)
-            WITH n, coalesce(n.group, head(labels(n)), 'Graph') AS group
-            OPTIONAL MATCH (n)-[bridge]-()
-            WHERE coalesce(bridge.kind, '') = 'bridge'
-            WITH n, group,
-                 CASE WHEN bridge IS NULL THEN null
-                      ELSE abs(sin(toFloat(id(startNode(bridge))) * 12.9898
-                                 + toFloat(id(endNode(bridge))) * 78.233
-                                 + 37.719))
-                 END AS bridgeScoreCandidate,
+            WITH n,
+                 coalesce(n.group, head(labels(n)), 'Graph') AS group,
                  abs(sin(toFloat(id(n)) * 12.9898 + 78.233)) AS nodeScore
-            WITH n, group, min(bridgeScoreCandidate) AS bridgeScore, nodeScore
-            ORDER BY group,
-                     CASE WHEN bridgeScore IS NULL THEN 1 ELSE 0 END,
-                     coalesce(bridgeScore, nodeScore),
-                     nodeScore
+            ORDER BY group, nodeScore
             WITH group, collect(n) AS bucket
             WITH collect(bucket) AS buckets, count(*) AS bucketCount
             UNWIND buckets AS bucket
-            WITH bucket, toInteger(floor(1000.0 / bucketCount)) AS perBucket
+            WITH bucket,
+                 CASE WHEN bucketCount > 1000 THEN 1 ELSE toInteger(floor(1000.0 / bucketCount)) END AS perBucket
             UNWIND bucket[0..perBucket] AS n
+            WITH n, abs(sin(toFloat(id(n)) * 12.9898 + 78.233)) AS sampleScore
+            ORDER BY sampleScore
+            LIMIT 1000
             RETURN id(n) AS idx,
                    coalesce(n.name, n.title, toString(id(n))) AS name,
                    coalesce(n.group, head(labels(n)), 'Graph') AS group,
@@ -78,26 +71,19 @@ public class DireViewResource {
                OR (n.dire_fast_x IS NOT NULL AND n.dire_fast_y IS NOT NULL)
                OR (n.dire_balanced_x IS NOT NULL AND n.dire_balanced_y IS NOT NULL)
                OR (n.dire_wide_x IS NOT NULL AND n.dire_wide_y IS NOT NULL)
-            WITH n, coalesce(n.group, head(labels(n)), 'Graph') AS group
-            OPTIONAL MATCH (n)-[bridge]-()
-            WHERE coalesce(bridge.kind, '') = 'bridge'
-            WITH n, group,
-                 CASE WHEN bridge IS NULL THEN null
-                      ELSE abs(sin(toFloat(id(startNode(bridge))) * 12.9898
-                                 + toFloat(id(endNode(bridge))) * 78.233
-                                 + 37.719))
-                 END AS bridgeScoreCandidate,
+            WITH n,
+                 coalesce(n.group, head(labels(n)), 'Graph') AS group,
                  abs(sin(toFloat(id(n)) * 12.9898 + 78.233)) AS nodeScore
-            WITH n, group, min(bridgeScoreCandidate) AS bridgeScore, nodeScore
-            ORDER BY group,
-                     CASE WHEN bridgeScore IS NULL THEN 1 ELSE 0 END,
-                     coalesce(bridgeScore, nodeScore),
-                     nodeScore
+            ORDER BY group, nodeScore
             WITH group, collect(id(n)) AS bucket
             WITH collect(bucket) AS buckets, count(*) AS bucketCount
             UNWIND buckets AS bucket
-            WITH bucket, toInteger(floor(1000.0 / bucketCount)) AS perBucket
+            WITH bucket,
+                 CASE WHEN bucketCount > 1000 THEN 1 ELSE toInteger(floor(1000.0 / bucketCount)) END AS perBucket
             UNWIND bucket[0..perBucket] AS visibleId
+            WITH visibleId, abs(sin(toFloat(visibleId) * 12.9898 + 78.233)) AS sampleScore
+            ORDER BY sampleScore
+            LIMIT 1000
             WITH collect(visibleId) AS visibleIds
             MATCH (a)-[r]->(b)
             WHERE id(a) IN visibleIds AND id(b) IN visibleIds

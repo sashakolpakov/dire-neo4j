@@ -177,8 +177,9 @@ Default assumptions:
 - `group` or the first node label is used for color categories.
 - `kind: 'bridge'` marks bridge edges; other edges are treated as local.
 
-The default viewer query loads a bridge-aware random sample of up to 1,000
-coordinate-bearing nodes. Edit the Cypher panel to remove or change the limit.
+The default viewer query loads a deterministic random sample of up to 1,000
+coordinate-bearing nodes, balanced by category when `group` is present. Edit the
+Cypher panel to remove or change the limit.
 
 Editable viewer queries use this contract:
 

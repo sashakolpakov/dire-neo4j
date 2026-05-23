@@ -133,9 +133,10 @@ http://localhost:7474/dire/
 
 The viewer renders stored coordinates directly. Its default node query reads the
 standard DiRe coordinate columns from any node, and its default edge query reads
-relationships between displayed nodes. The default query loads a bridge-aware
-random sample of up to 1,000 nodes. Edit either query in the page and press
-`Run` to load a filtered or alternate graph.
+relationships between displayed nodes. The default query loads a deterministic
+random sample of up to 1,000 nodes, balanced by category when `group` is present.
+Edit either query in the page and press `Run` to load a filtered or alternate
+graph.
 
 The viewer recognizes `dire_wide_x` / `dire_wide_y` as the `DiRe wide` variant
 when those properties are present.
