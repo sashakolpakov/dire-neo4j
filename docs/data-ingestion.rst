@@ -137,6 +137,54 @@ Load it with the same pattern:
 
 Then run DiRe over ``(:Item)-[:SIMILAR_TO]->(:Item)``.
 
+MNIST Loader
+------------
+
+The repository includes a MNIST loader that creates the graph topology, loads it
+through Neo4j's HTTP transaction endpoint, and writes DiRe coordinates.
+
+Download the train and test files:
+
+.. code-block:: sh
+
+   python3 -m pip install numpy scikit-learn
+
+   mkdir -p .tmp/mnist
+   curl -L -o .tmp/mnist/train-images-idx3-ubyte.gz \
+     https://storage.googleapis.com/cvdf-datasets/mnist/train-images-idx3-ubyte.gz
+   curl -L -o .tmp/mnist/train-labels-idx1-ubyte.gz \
+     https://storage.googleapis.com/cvdf-datasets/mnist/train-labels-idx1-ubyte.gz
+   curl -L -o .tmp/mnist/t10k-images-idx3-ubyte.gz \
+     https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte.gz
+   curl -L -o .tmp/mnist/t10k-labels-idx1-ubyte.gz \
+     https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz
+
+Load a larger sample:
+
+.. code-block:: sh
+
+   python3 examples/mnist/load_mnist_graph.py \
+     --endpoint http://127.0.0.1:7474/db/neo4j/tx/commit \
+     --mnist-dir .tmp/mnist \
+     --samples 20000 \
+     --layout-runs all
+
+Load the full 70,000-image train+test set:
+
+.. code-block:: sh
+
+   python3 examples/mnist/load_mnist_graph.py \
+     --endpoint http://127.0.0.1:7474/db/neo4j/tx/commit \
+     --mnist-dir .tmp/mnist \
+     --full \
+     --split all \
+     --neighbor-mode clustered \
+     --layout-runs wide
+
+The loader stores MNIST items as ``:Paper:MNIST`` nodes, nearest-neighbor links
+as weighted ``:CITES`` relationships, and cross-digit links as
+``kind: 'bridge'``.
+
 Preflight Checks
 ----------------
 

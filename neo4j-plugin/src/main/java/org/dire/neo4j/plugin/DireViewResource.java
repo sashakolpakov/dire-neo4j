@@ -32,11 +32,15 @@ import java.util.Set;
 @Path("/")
 public class DireViewResource {
     private static final String DEFAULT_NODE_QUERY = """
-            WITH 1000 AS sampleSize
+            WITH 20000 AS sampleSize,
+                 ['dire_initial', 'dire_fast', 'dire', 'dire_balanced', 'dire_wide', 'spectral'] AS coordinateRuns
             MATCH (n)
-            WHERE (n.dire_x IS NOT NULL AND n.dire_y IS NOT NULL)
-            WITH sampleSize, count(n) AS sourceTotal, collect(n) AS candidates
-            UNWIND candidates AS n
+            WHERE (n.x IS NOT NULL AND n.y IS NOT NULL)
+               OR any(run IN coordinateRuns WHERE n[run + '_x'] IS NOT NULL AND n[run + '_y'] IS NOT NULL)
+            WITH sampleSize, coordinateRuns, count(n) AS sourceTotal
+            MATCH (n)
+            WHERE (n.x IS NOT NULL AND n.y IS NOT NULL)
+               OR any(run IN coordinateRuns WHERE n[run + '_x'] IS NOT NULL AND n[run + '_y'] IS NOT NULL)
             WITH sampleSize, sourceTotal, n, rand() AS draw
             ORDER BY draw
             WITH sampleSize, sourceTotal, collect(n) AS sampled

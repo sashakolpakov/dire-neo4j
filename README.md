@@ -184,6 +184,38 @@ is to compute a k-nearest-neighbor graph outside Neo4j, then load one node per
 item and one weighted relationship per neighbor pair. Use a categorical property
 such as `group` or `digit` for viewer colors.
 
+The repository includes a MNIST loader that can use the full 70,000-image
+train+test set:
+
+```sh
+python3 -m pip install numpy scikit-learn
+
+mkdir -p .tmp/mnist
+curl -L -o .tmp/mnist/train-images-idx3-ubyte.gz \
+  https://storage.googleapis.com/cvdf-datasets/mnist/train-images-idx3-ubyte.gz
+curl -L -o .tmp/mnist/train-labels-idx1-ubyte.gz \
+  https://storage.googleapis.com/cvdf-datasets/mnist/train-labels-idx1-ubyte.gz
+curl -L -o .tmp/mnist/t10k-images-idx3-ubyte.gz \
+  https://storage.googleapis.com/cvdf-datasets/mnist/t10k-images-idx3-ubyte.gz
+curl -L -o .tmp/mnist/t10k-labels-idx1-ubyte.gz \
+  https://storage.googleapis.com/cvdf-datasets/mnist/t10k-labels-idx1-ubyte.gz
+
+python3 examples/mnist/load_mnist_graph.py \
+  --endpoint http://127.0.0.1:7474/db/neo4j/tx/commit \
+  --mnist-dir .tmp/mnist \
+  --samples 20000 \
+  --layout-runs all
+```
+
+For the complete MNIST set, replace `--samples 20000` with:
+
+```sh
+--full --split all --neighbor-mode clustered
+```
+
+The example writes `:Paper:MNIST` nodes, weighted `:CITES` edges, bridge-edge
+metadata, and DiRe coordinate properties for the viewer.
+
 ## Run A Layout
 
 `dire.layout.write` reads a Cypher projection. The node query must return
@@ -253,11 +285,11 @@ Open:
 http://localhost:7474/dire/
 ```
 
-The default viewer query randomly samples up to 1,000 coordinate-bearing nodes.
-Edit the first line in the node query to load a different sample size:
+The default viewer query randomly samples up to 20,000 coordinate-bearing nodes.
+Edit the first line in the node query to load a smaller or larger sample:
 
 ```cypher
-WITH 4000 AS sampleSize
+WITH 70000 AS sampleSize
 ```
 
 The viewer uses:

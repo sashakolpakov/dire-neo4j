@@ -34,12 +34,12 @@ Display properties:
 Default Sampling
 ----------------
 
-The default node query randomly samples up to 1,000 nodes with ``dire_x`` and
-``dire_y``. Change the first line to load a different sample size:
+The default node query randomly samples up to 20,000 nodes with stored
+coordinate properties. Change the first line to load a smaller or larger sample:
 
 .. code-block:: cypher
 
-   WITH 4000 AS sampleSize
+   WITH 70000 AS sampleSize
 
 The vertex slider controls how many loaded nodes are drawn. It does not fetch
 more data from Neo4j. The Cypher sample size controls what is loaded.

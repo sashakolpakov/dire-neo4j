@@ -231,12 +231,12 @@ Open:
 http://localhost:7474/dire/
 ```
 
-The default viewer query randomly samples up to 1,000 nodes with stored
-`dire_x`/`dire_y` coordinates. To load more, edit the first line in the node
-query:
+The default viewer query randomly samples up to 20,000 nodes with stored
+coordinate properties. To load a smaller or larger sample, edit the first line
+in the node query:
 
 ```cypher
-WITH 4000 AS sampleSize
+WITH 70000 AS sampleSize
 ```
 
 The vertex slider only changes how many loaded nodes are drawn. The Cypher
