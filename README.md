@@ -78,6 +78,9 @@ NEO4J_CONF="$(brew --prefix neo4j)/libexec/conf" neo4j console
 
 Open `http://localhost:7474/dire/`.
 
+For a complete installation and first-layout walkthrough, see
+[docs/neo4j-users.md](docs/neo4j-users.md).
+
 ## Run DiRe On A Loaded Graph
 
 After loading data into Neo4j, call `dire.layout.write` with a node projection

@@ -206,17 +206,18 @@ function drawRun(runKey, options = {}) {
   const viewport = options.viewport || null;
   const b = options.bounds || null;
 
-  if (drawEdges) {
+  if (drawEdges || drawBridges) {
     ctx.lineCap = "round";
     for (const e of graph.edges) {
-      if (!drawBridges && e.kind === "bridge") continue;
+      const bridge = e.kind === "bridge";
+      if (bridge ? !drawBridges : !drawEdges) continue;
       const source = nodesByIdx.get(e.source);
       const target = nodesByIdx.get(e.target);
       if (!source || !target) continue;
       const a = screen(source, viewport, b);
       const c = screen(target, viewport, b);
-      ctx.strokeStyle = e.kind === "bridge" ? "rgba(122, 85, 13, 0.58)" : "rgba(37, 48, 65, 0.13)";
-      ctx.lineWidth = e.kind === "bridge" ? 1.35 : 0.65;
+      ctx.strokeStyle = bridge ? "rgba(122, 85, 13, 0.58)" : "rgba(37, 48, 65, 0.13)";
+      ctx.lineWidth = bridge ? 1.35 : 0.65;
       ctx.beginPath();
       ctx.moveTo(a.x, a.y);
       ctx.lineTo(c.x, c.y);
