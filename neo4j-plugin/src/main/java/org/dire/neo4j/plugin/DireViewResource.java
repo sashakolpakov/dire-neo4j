@@ -31,62 +31,20 @@ import java.util.Set;
 
 @Path("/")
 public class DireViewResource {
+    private static final int DEFAULT_DISPLAY_LIMIT = 1000;
+
     private static final String DEFAULT_NODE_QUERY = """
             MATCH (n)
             WHERE (n.dire_x IS NOT NULL AND n.dire_y IS NOT NULL)
-               OR (n.dire_initial_x IS NOT NULL AND n.dire_initial_y IS NOT NULL)
-               OR (n.spectral_x IS NOT NULL AND n.spectral_y IS NOT NULL)
-               OR (n.dire_fast_x IS NOT NULL AND n.dire_fast_y IS NOT NULL)
-               OR (n.dire_balanced_x IS NOT NULL AND n.dire_balanced_y IS NOT NULL)
-               OR (n.dire_wide_x IS NOT NULL AND n.dire_wide_y IS NOT NULL)
-            WITH n,
-                 coalesce(n.group, head(labels(n)), 'Graph') AS group,
-                 abs(sin(toFloat(id(n)) * 12.9898 + 78.233)) AS nodeScore
-            ORDER BY group, nodeScore
-            WITH group, collect(n) AS bucket
-            WITH collect(bucket) AS buckets, count(*) AS bucketCount
-            UNWIND buckets AS bucket
-            WITH bucket,
-                 CASE WHEN bucketCount > 1000 THEN 1 ELSE toInteger(floor(1000.0 / bucketCount)) END AS perBucket
-            UNWIND bucket[0..perBucket] AS n
-            WITH n, abs(sin(toFloat(id(n)) * 12.9898 + 78.233)) AS sampleScore
-            ORDER BY sampleScore
-            LIMIT 1000
             RETURN id(n) AS idx,
                    coalesce(n.name, n.title, toString(id(n))) AS name,
                    coalesce(n.group, head(labels(n)), 'Graph') AS group,
-                   n.dire_initial_x AS dire_initial_x, n.dire_initial_y AS dire_initial_y,
-                   n.spectral_x AS spectral_x, n.spectral_y AS spectral_y,
-                   n.dire_fast_x AS dire_fast_x, n.dire_fast_y AS dire_fast_y,
-                   n.dire_balanced_x AS dire_balanced_x, n.dire_balanced_y AS dire_balanced_y,
-                   n.dire_wide_x AS dire_wide_x, n.dire_wide_y AS dire_wide_y,
-                   n.dire_x AS dire_x, n.dire_y AS dire_y
+                   n.localIndex AS localIndex
             """;
 
     private static final String DEFAULT_EDGE_QUERY = """
-            MATCH (n)
-            WHERE (n.dire_x IS NOT NULL AND n.dire_y IS NOT NULL)
-               OR (n.dire_initial_x IS NOT NULL AND n.dire_initial_y IS NOT NULL)
-               OR (n.spectral_x IS NOT NULL AND n.spectral_y IS NOT NULL)
-               OR (n.dire_fast_x IS NOT NULL AND n.dire_fast_y IS NOT NULL)
-               OR (n.dire_balanced_x IS NOT NULL AND n.dire_balanced_y IS NOT NULL)
-               OR (n.dire_wide_x IS NOT NULL AND n.dire_wide_y IS NOT NULL)
-            WITH n,
-                 coalesce(n.group, head(labels(n)), 'Graph') AS group,
-                 abs(sin(toFloat(id(n)) * 12.9898 + 78.233)) AS nodeScore
-            ORDER BY group, nodeScore
-            WITH group, collect(id(n)) AS bucket
-            WITH collect(bucket) AS buckets, count(*) AS bucketCount
-            UNWIND buckets AS bucket
-            WITH bucket,
-                 CASE WHEN bucketCount > 1000 THEN 1 ELSE toInteger(floor(1000.0 / bucketCount)) END AS perBucket
-            UNWIND bucket[0..perBucket] AS visibleId
-            WITH visibleId, abs(sin(toFloat(visibleId) * 12.9898 + 78.233)) AS sampleScore
-            ORDER BY sampleScore
-            LIMIT 1000
-            WITH collect(visibleId) AS visibleIds
             MATCH (a)-[r]->(b)
-            WHERE id(a) IN visibleIds AND id(b) IN visibleIds
+            WHERE id(a) IN $visibleIds AND id(b) IN $visibleIds
             RETURN id(a) AS source, id(b) AS target,
                    coalesce(r.weight, 1.0) AS weight,
                    CASE coalesce(r.kind, '') WHEN 'bridge' THEN 'bridge' ELSE 'local' END AS kind
@@ -135,7 +93,7 @@ public class DireViewResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response defaultData() {
         try {
-            return json(loadPayload(DEFAULT_NODE_QUERY, DEFAULT_EDGE_QUERY));
+            return json(loadPayload(DEFAULT_NODE_QUERY, DEFAULT_EDGE_QUERY, true));
         } catch (RuntimeException error) {
             return error(error);
         }
@@ -151,7 +109,7 @@ public class DireViewResource {
         String nodes = normalizeQuery(nodeQuery, DEFAULT_NODE_QUERY);
         String edges = normalizeQuery(edgeQuery, DEFAULT_EDGE_QUERY);
         try {
-            return json(loadPayload(nodes, edges));
+            return json(loadPayload(nodes, edges, false));
         } catch (RuntimeException error) {
             return error(error);
         }
@@ -187,9 +145,12 @@ public class DireViewResource {
                 .build();
     }
 
-    private Map<String, Object> loadPayload(String nodeQuery, String edgeQuery) {
+    private Map<String, Object> loadPayload(String nodeQuery, String edgeQuery, boolean applyDefaultLimit) {
         List<Map<String, Object>> nodeRows = executeRows(nodeQuery);
-        List<Map<String, Object>> edgeRows = executeRows(edgeQuery);
+        List<Map<String, Object>> visibleRows = applyDefaultLimit ? coherentSample(nodeRows, DEFAULT_DISPLAY_LIMIT) : nodeRows;
+        Set<Long> visibleIds = nodeIds(visibleRows);
+        List<Map<String, Object>> hydratedNodeRows = hydrateCoordinates(visibleRows);
+        List<Map<String, Object>> edgeRows = executeRows(edgeQuery, Map.of("visibleIds", new ArrayList<>(visibleIds)));
         List<Map<String, Object>> metricRows = executeRows("""
                 MATCH (r:EmbeddingRun)
                 RETURN r.key AS key, r.name AS name, r.description AS description,
@@ -201,18 +162,18 @@ public class DireViewResource {
 
         Map<String, Map<String, Object>> metrics = metrics(metricRows);
         Map<String, Map<String, Object>> runs = new LinkedHashMap<>();
-        Set<String> columns = allColumns(nodeRows);
+        Set<String> columns = allColumns(hydratedNodeRows);
         for (RunColumns run : KNOWN_RUNS) {
-            if (columns.contains(run.xColumn) && columns.contains(run.yColumn) && hasCoordinates(nodeRows, run)) {
+            if (columns.contains(run.xColumn) && columns.contains(run.yColumn) && hasCoordinates(hydratedNodeRows, run)) {
                 metrics.computeIfAbsent(run.key, ignored -> defaultMetric(run));
-                runs.put(run.key, runData(nodeRows, run));
+                runs.put(run.key, runData(hydratedNodeRows, run));
             }
         }
         for (String key : metrics.keySet()) {
             if (!runs.containsKey(key)) {
                 RunColumns run = runForMetric(key, metrics.get(key));
-                if (columns.contains(run.xColumn) && columns.contains(run.yColumn) && hasCoordinates(nodeRows, run)) {
-                    runs.put(key, runData(nodeRows, run));
+                if (columns.contains(run.xColumn) && columns.contains(run.yColumn) && hasCoordinates(hydratedNodeRows, run)) {
+                    runs.put(key, runData(hydratedNodeRows, run));
                 }
             }
         }
@@ -255,7 +216,11 @@ public class DireViewResource {
     }
 
     private List<Map<String, Object>> executeRows(String query) {
-        try (Transaction tx = database().beginTx(); Result result = tx.execute(query)) {
+        return executeRows(query, Map.of());
+    }
+
+    private List<Map<String, Object>> executeRows(String query, Map<String, Object> parameters) {
+        try (Transaction tx = database().beginTx(); Result result = tx.execute(query, parameters)) {
             List<Map<String, Object>> rows = new ArrayList<>();
             while (result.hasNext()) {
                 rows.add(new LinkedHashMap<>(result.next()));
@@ -265,6 +230,103 @@ public class DireViewResource {
         } catch (RuntimeException error) {
             throw new IllegalArgumentException("Cypher failed: " + message(error), error);
         }
+    }
+
+    private List<Map<String, Object>> coherentSample(List<Map<String, Object>> rows, int limit) {
+        if (rows.size() <= limit) {
+            return rows;
+        }
+        Map<String, List<Map<String, Object>>> buckets = new LinkedHashMap<>();
+        for (Map<String, Object> row : rows) {
+            String group = stringOr(row.get("group"), "Graph");
+            buckets.computeIfAbsent(group, ignored -> new ArrayList<>()).add(row);
+        }
+        int bucketCount = Math.max(1, buckets.size());
+        int perBucket = Math.max(1, limit / bucketCount);
+        List<Map<String, Object>> selected = new ArrayList<>(Math.min(limit, rows.size()));
+        for (List<Map<String, Object>> bucket : buckets.values()) {
+            bucket.sort((left, right) -> {
+                double a = sortKey(left);
+                double b = sortKey(right);
+                return Double.compare(a, b);
+            });
+            int take = Math.min(perBucket, bucket.size());
+            int start = bucket.size() <= take ? 0 : deterministicStart(bucket.size(), take);
+            selected.addAll(bucket.subList(start, start + take));
+        }
+        if (selected.size() > limit) {
+            return new ArrayList<>(selected.subList(0, limit));
+        }
+        return selected;
+    }
+
+    private double sortKey(Map<String, Object> row) {
+        Double local = numberOrNull(row.get("localIndex"));
+        if (local != null) {
+            return local;
+        }
+        return nodeScore(longOr(row.get("idx"), 0L));
+    }
+
+    private int deterministicStart(int size, int take) {
+        if (size <= take) {
+            return 0;
+        }
+        double value = Math.abs(Math.sin(1.0d * 12.9898d + 78.233d));
+        return (int) Math.floor(value * (size - take + 1));
+    }
+
+    private double nodeScore(long id) {
+        return Math.abs(Math.sin(id * 12.9898d + 78.233d));
+    }
+
+    private Set<Long> nodeIds(List<Map<String, Object>> rows) {
+        Set<Long> ids = new LinkedHashSet<>();
+        for (Map<String, Object> row : rows) {
+            Number id = number(row.get("idx"));
+            if (id != null) {
+                ids.add(id.longValue());
+            }
+        }
+        return ids;
+    }
+
+    private List<Map<String, Object>> hydrateCoordinates(List<Map<String, Object>> rows) {
+        Set<Long> ids = nodeIds(rows);
+        if (ids.isEmpty()) {
+            return rows;
+        }
+        Map<Long, Map<String, Object>> coordinatesById = new LinkedHashMap<>();
+        for (Map<String, Object> row : executeRows("""
+                MATCH (n)
+                WHERE id(n) IN $visibleIds
+                RETURN id(n) AS idx,
+                       n.dire_initial_x AS dire_initial_x, n.dire_initial_y AS dire_initial_y,
+                       n.spectral_x AS spectral_x, n.spectral_y AS spectral_y,
+                       n.dire_fast_x AS dire_fast_x, n.dire_fast_y AS dire_fast_y,
+                       n.dire_balanced_x AS dire_balanced_x, n.dire_balanced_y AS dire_balanced_y,
+                       n.dire_wide_x AS dire_wide_x, n.dire_wide_y AS dire_wide_y,
+                       n.dire_x AS dire_x, n.dire_y AS dire_y,
+                       n.x AS x, n.y AS y
+                """, Map.of("visibleIds", new ArrayList<>(ids)))) {
+            Number id = number(row.get("idx"));
+            if (id != null) {
+                coordinatesById.put(id.longValue(), row);
+            }
+        }
+        List<Map<String, Object>> hydrated = new ArrayList<>(rows.size());
+        for (Map<String, Object> row : rows) {
+            Map<String, Object> copy = new LinkedHashMap<>(row);
+            Number id = number(copy.get("idx"));
+            if (id != null) {
+                Map<String, Object> coordinates = coordinatesById.get(id.longValue());
+                if (coordinates != null) {
+                    copy.putAll(coordinates);
+                }
+            }
+            hydrated.add(copy);
+        }
+        return hydrated;
     }
 
     private GraphDatabaseService database() {

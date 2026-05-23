@@ -340,7 +340,7 @@ function applyData(nextData, statusText) {
   visibleCount = DATA.totalNodes;
   nodeQuery.value = DATA.sample.nodeQuery;
   edgeQuery.value = DATA.sample.edgeQuery;
-  queryStatus.textContent = statusText;
+  queryStatus.textContent = "";
   hud.innerHTML = `<strong>${DATA.metrics[current]?.name || current}</strong><span>${statusText}</span>`;
   const vertexControl = document.getElementById("vertexCount");
   vertexControl.max = Math.max(1, DATA.totalNodes);
@@ -356,7 +356,7 @@ async function loadDefault() {
   const response = await fetch("./api/data", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || JSON.stringify(payload));
-  applyData(payload, `Default sample loaded ${payload.totalNodes.toLocaleString()} nodes and ${payload.totalEdges.toLocaleString()} edges.`);
+  applyData(payload, `Loaded ${payload.totalNodes.toLocaleString()} nodes and ${payload.totalEdges.toLocaleString()} edges.`);
 }
 
 async function runCypher() {
