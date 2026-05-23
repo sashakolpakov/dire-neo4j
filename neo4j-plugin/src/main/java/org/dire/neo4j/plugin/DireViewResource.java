@@ -31,15 +31,31 @@ import java.util.Set;
 
 @Path("/")
 public class DireViewResource {
-    private static final int DEFAULT_DISPLAY_LIMIT = 1000;
-
     private static final String DEFAULT_NODE_QUERY = """
+            WITH 1000 AS sampleSize
             MATCH (n)
             WHERE (n.dire_x IS NOT NULL AND n.dire_y IS NOT NULL)
+            WITH sampleSize, count(n) AS sourceTotal, collect(n) AS candidates
+            WITH sampleSize, sourceTotal, candidates,
+                 CASE
+                   WHEN sourceTotal <= sampleSize THEN 1
+                   ELSE toInteger(ceil(toFloat(sourceTotal) / sampleSize)) * 2
+                 END AS period
+            WITH sampleSize, sourceTotal, candidates, period,
+                 CASE WHEN sourceTotal <= sampleSize THEN 1 ELSE 2 END AS keep,
+                 toInteger(floor(rand() * period)) AS offset
+            UNWIND candidates AS n
+            WITH sampleSize, sourceTotal, period, keep, offset, n,
+                 coalesce(toIntegerOrNull(n.localIndex), id(n)) AS sampleKey
+            WHERE sourceTotal <= sampleSize OR ((sampleKey + offset) % period) < keep
+            ORDER BY coalesce(n.group, head(labels(n)), 'Graph'), coalesce(n.localIndex, id(n))
+            WITH sampleSize, sourceTotal, collect(n) AS sampled
+            UNWIND sampled[..sampleSize] AS n
             RETURN id(n) AS idx,
                    coalesce(n.name, n.title, toString(id(n))) AS name,
                    coalesce(n.group, head(labels(n)), 'Graph') AS group,
-                   n.localIndex AS localIndex
+                   n.localIndex AS localIndex,
+                   sourceTotal AS sourceTotal
             """;
 
     private static final String DEFAULT_EDGE_QUERY = """
@@ -93,7 +109,7 @@ public class DireViewResource {
     @Produces(MediaType.APPLICATION_JSON)
     public Response defaultData() {
         try {
-            return json(loadPayload(DEFAULT_NODE_QUERY, DEFAULT_EDGE_QUERY, true));
+            return json(loadPayload(DEFAULT_NODE_QUERY, DEFAULT_EDGE_QUERY));
         } catch (RuntimeException error) {
             return error(error);
         }
@@ -109,7 +125,7 @@ public class DireViewResource {
         String nodes = normalizeQuery(nodeQuery, DEFAULT_NODE_QUERY);
         String edges = normalizeQuery(edgeQuery, DEFAULT_EDGE_QUERY);
         try {
-            return json(loadPayload(nodes, edges, false));
+            return json(loadPayload(nodes, edges));
         } catch (RuntimeException error) {
             return error(error);
         }
@@ -145,11 +161,11 @@ public class DireViewResource {
                 .build();
     }
 
-    private Map<String, Object> loadPayload(String nodeQuery, String edgeQuery, boolean applyDefaultLimit) {
+    private Map<String, Object> loadPayload(String nodeQuery, String edgeQuery) {
         List<Map<String, Object>> nodeRows = executeRows(nodeQuery);
-        List<Map<String, Object>> visibleRows = applyDefaultLimit ? coherentSample(nodeRows, DEFAULT_DISPLAY_LIMIT) : nodeRows;
-        Set<Long> visibleIds = nodeIds(visibleRows);
-        List<Map<String, Object>> hydratedNodeRows = hydrateCoordinates(visibleRows);
+        long sourceNodes = sourceNodes(nodeRows);
+        Set<Long> visibleIds = nodeIds(nodeRows);
+        List<Map<String, Object>> hydratedNodeRows = hydrateCoordinates(nodeRows);
         List<Map<String, Object>> edgeRows = executeRows(edgeQuery, Map.of("visibleIds", new ArrayList<>(visibleIds)));
         List<Map<String, Object>> metricRows = executeRows("""
                 MATCH (r:EmbeddingRun)
@@ -207,6 +223,7 @@ public class DireViewResource {
         payload.put("groups", groups);
         payload.put("edgeKinds", edgeKinds);
         payload.put("components", components);
+        payload.put("sourceNodes", sourceNodes);
         payload.put("totalNodes", activeNodes.size());
         payload.put("totalEdges", edges.size());
         payload.put("activeRun", activeRun);
@@ -232,54 +249,6 @@ public class DireViewResource {
         }
     }
 
-    private List<Map<String, Object>> coherentSample(List<Map<String, Object>> rows, int limit) {
-        if (rows.size() <= limit) {
-            return rows;
-        }
-        Map<String, List<Map<String, Object>>> buckets = new LinkedHashMap<>();
-        for (Map<String, Object> row : rows) {
-            String group = stringOr(row.get("group"), "Graph");
-            buckets.computeIfAbsent(group, ignored -> new ArrayList<>()).add(row);
-        }
-        int bucketCount = Math.max(1, buckets.size());
-        int perBucket = Math.max(1, limit / bucketCount);
-        List<Map<String, Object>> selected = new ArrayList<>(Math.min(limit, rows.size()));
-        for (List<Map<String, Object>> bucket : buckets.values()) {
-            bucket.sort((left, right) -> {
-                double a = sortKey(left);
-                double b = sortKey(right);
-                return Double.compare(a, b);
-            });
-            int take = Math.min(perBucket, bucket.size());
-            int start = bucket.size() <= take ? 0 : deterministicStart(bucket.size(), take);
-            selected.addAll(bucket.subList(start, start + take));
-        }
-        if (selected.size() > limit) {
-            return new ArrayList<>(selected.subList(0, limit));
-        }
-        return selected;
-    }
-
-    private double sortKey(Map<String, Object> row) {
-        Double local = numberOrNull(row.get("localIndex"));
-        if (local != null) {
-            return local;
-        }
-        return nodeScore(longOr(row.get("idx"), 0L));
-    }
-
-    private int deterministicStart(int size, int take) {
-        if (size <= take) {
-            return 0;
-        }
-        double value = Math.abs(Math.sin(1.0d * 12.9898d + 78.233d));
-        return (int) Math.floor(value * (size - take + 1));
-    }
-
-    private double nodeScore(long id) {
-        return Math.abs(Math.sin(id * 12.9898d + 78.233d));
-    }
-
     private Set<Long> nodeIds(List<Map<String, Object>> rows) {
         Set<Long> ids = new LinkedHashSet<>();
         for (Map<String, Object> row : rows) {
@@ -289,6 +258,17 @@ public class DireViewResource {
             }
         }
         return ids;
+    }
+
+    private long sourceNodes(List<Map<String, Object>> rows) {
+        long sourceNodes = rows.size();
+        for (Map<String, Object> row : rows) {
+            Number count = number(row.get("sourceTotal"));
+            if (count != null) {
+                sourceNodes = Math.max(sourceNodes, count.longValue());
+            }
+        }
+        return sourceNodes;
     }
 
     private List<Map<String, Object>> hydrateCoordinates(List<Map<String, Object>> rows) {

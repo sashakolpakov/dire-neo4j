@@ -299,7 +299,9 @@ function updateUi() {
   document.getElementById("edgeLegendLocal").textContent = (edgeKinds.local || 0).toLocaleString();
   document.getElementById("edgeLegendBridge").textContent = (edgeKinds.bridge || 0).toLocaleString();
   document.getElementById("activeBadge").textContent = `active: ${DATA.activeRun}`;
-  document.getElementById("loadedBadge").textContent = `loaded: ${DATA.totalNodes.toLocaleString()}`;
+  document.getElementById("loadedBadge").textContent = DATA.sourceNodes > DATA.totalNodes
+    ? `sample: ${DATA.totalNodes.toLocaleString()} of ${DATA.sourceNodes.toLocaleString()}`
+    : `loaded: ${DATA.totalNodes.toLocaleString()}`;
   document.getElementById("vertexOutput").textContent = visibleCount >= DATA.totalNodes
     ? `All ${DATA.totalNodes.toLocaleString()}`
     : visibleCount.toLocaleString();
@@ -356,7 +358,10 @@ async function loadDefault() {
   const response = await fetch("./api/data", { cache: "no-store" });
   const payload = await response.json();
   if (!response.ok) throw new Error(payload.message || JSON.stringify(payload));
-  applyData(payload, `Loaded ${payload.totalNodes.toLocaleString()} nodes and ${payload.totalEdges.toLocaleString()} edges.`);
+  const nodeText = payload.sourceNodes > payload.totalNodes
+    ? `${payload.totalNodes.toLocaleString()} of ${payload.sourceNodes.toLocaleString()} nodes`
+    : `${payload.totalNodes.toLocaleString()} nodes`;
+  applyData(payload, `Loaded ${nodeText} and ${payload.totalEdges.toLocaleString()} edges.`);
 }
 
 async function runCypher() {
@@ -377,7 +382,10 @@ async function runCypher() {
     throw new Error(text || `HTTP ${response.status}`);
   }
   if (!response.ok) throw new Error(payload.message || text);
-  applyData(payload, `Loaded ${payload.totalNodes.toLocaleString()} nodes and ${payload.totalEdges.toLocaleString()} edges.`);
+  const nodeText = payload.sourceNodes > payload.totalNodes
+    ? `${payload.totalNodes.toLocaleString()} of ${payload.sourceNodes.toLocaleString()} nodes`
+    : `${payload.totalNodes.toLocaleString()} nodes`;
+  applyData(payload, `Loaded ${nodeText} and ${payload.totalEdges.toLocaleString()} edges.`);
 }
 
 function nearest(clientX, clientY) {

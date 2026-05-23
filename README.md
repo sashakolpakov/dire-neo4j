@@ -177,9 +177,9 @@ Default assumptions:
 - `group` or the first node label is used for color categories.
 - `kind: 'bridge'` marks bridge edges; other edges are treated as local.
 
-The default viewer query loads a deterministic random sample of up to 1,000
-coordinate-bearing nodes, balanced by category when `group` is present. Edit the
-Cypher panel to remove or change the limit.
+The default viewer query samples up to 1,000 coordinate-bearing nodes. The
+sample size is the `WITH 1000 AS sampleSize` line in the node Cypher. Edit that
+line, or replace the query, to load a different graph slice.
 
 Editable viewer queries use this contract:
 
@@ -188,7 +188,7 @@ Editable viewer queries use this contract:
 - `source` and `target` match node `idx`
 
 Use Cypher to choose graph size and scope. The vertex slider only changes how
-many loaded nodes are drawn on screen.
+many already-loaded nodes and edges are drawn on screen.
 
 To compare a wider layout, run the same projection with a stronger repulsion
 and write it to `dire_wide_x/dire_wide_y`:
