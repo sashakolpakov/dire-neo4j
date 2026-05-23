@@ -1,0 +1,6 @@
+.m2/
+.tmp/
+target/
+*/target/
+.DS_Store
+*.log

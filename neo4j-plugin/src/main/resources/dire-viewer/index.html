@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DiRe Neo4j</title>
+  <style>
+    :root {
+      --bg: #eef1f5;
+      --panel: #ffffff;
+      --ink: #151922;
+      --muted: #5d6776;
+      --line: #c9d0da;
+      --line-soft: #e5e9ef;
+      --accent: #c96f22;
+      --accent-soft: #fff3e6;
+      --shadow: 0 8px 24px rgba(21, 25, 34, 0.08);
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      overflow: hidden;
+    }
+    button, input, textarea { font: inherit; }
+    .app {
+      height: 100vh;
+      display: grid;
+      grid-template-columns: 360px minmax(0, 1fr);
+    }
+    aside {
+      background: var(--panel);
+      border-right: 1px solid var(--line);
+      padding: 18px;
+      overflow-y: auto;
+      box-shadow: var(--shadow);
+      z-index: 2;
+    }
+    h1 {
+      font-size: 20px;
+      margin: 0 0 4px;
+      letter-spacing: 0;
+    }
+    .sub {
+      color: var(--muted);
+      margin: 0 0 16px;
+    }
+    .badge {
+      display: inline-block;
+      background: #eef1f5;
+      border: 1px solid var(--line-soft);
+      border-radius: 7px;
+      padding: 2px 6px;
+      margin-right: 4px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .section-title {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      margin: 18px 0 8px;
+    }
+    .run-list, .legend, .controls {
+      display: grid;
+      gap: 8px;
+    }
+    button.run {
+      width: 100%;
+      border: 1px solid var(--line);
+      background: #f9fafb;
+      border-radius: 7px;
+      padding: 10px 11px;
+      text-align: left;
+      cursor: pointer;
+      color: var(--ink);
+    }
+    button.run.active {
+      background: var(--accent-soft);
+      border-color: var(--accent);
+      box-shadow: inset 4px 0 0 var(--accent);
+    }
+    button.run strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 2px;
+    }
+    button.run span {
+      display: block;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .segmented {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      overflow: hidden;
+      background: #f8fafc;
+    }
+    .segmented button {
+      border: 0;
+      border-right: 1px solid var(--line);
+      background: transparent;
+      padding: 8px 6px;
+      cursor: pointer;
+      color: var(--muted);
+    }
+    .segmented button:last-child { border-right: 0; }
+    .segmented button.active {
+      background: #253041;
+      color: #fff;
+    }
+    .stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+    .stat {
+      background: #f8fafc;
+      border: 1px solid var(--line-soft);
+      border-radius: 7px;
+      padding: 8px;
+      min-width: 0;
+    }
+    .stat label {
+      display: block;
+      color: var(--muted);
+      font-size: 11px;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .stat strong {
+      display: block;
+      font-size: 16px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .info {
+      border: 1px solid var(--line-soft);
+      background: #f8fafc;
+      border-radius: 7px;
+      padding: 10px;
+      color: var(--muted);
+    }
+    .info summary {
+      cursor: pointer;
+      color: var(--ink);
+      font-weight: 650;
+    }
+    .info p {
+      margin: 8px 0 0;
+      font-size: 12px;
+    }
+    .info b { color: var(--ink); }
+    textarea.cypher {
+      width: 100%;
+      min-height: 132px;
+      margin: 8px 0 0;
+      padding: 9px;
+      border: 1px solid var(--line-soft);
+      background: #ffffff;
+      border-radius: 7px;
+      color: #253041;
+      font: 11px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      resize: vertical;
+      outline: none;
+    }
+    textarea.cypher:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(201, 111, 34, 0.16);
+    }
+    .query-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .query-actions button,
+    .controls button,
+    .controls label {
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 7px;
+      padding: 8px 10px;
+    }
+    .query-actions button,
+    .controls button {
+      cursor: pointer;
+      color: var(--ink);
+    }
+    .query-actions button.primary {
+      background: #253041;
+      border-color: #253041;
+      color: #ffffff;
+    }
+    .query-status {
+      min-height: 17px;
+      color: var(--muted);
+    }
+    .range-control {
+      display: grid;
+      gap: 8px;
+      border: 1px solid var(--line);
+      background: #fff;
+      border-radius: 7px;
+      padding: 9px 10px;
+    }
+    .range-control header,
+    .legend-row,
+    .legend-label,
+    .controls label {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .range-control header,
+    .legend-row {
+      justify-content: space-between;
+      color: var(--muted);
+    }
+    .range-control output {
+      color: var(--ink);
+      font-weight: 650;
+    }
+    .range-control input { width: 100%; }
+    .legend-label { color: var(--ink); }
+    .swatch {
+      width: 13px;
+      height: 13px;
+      border-radius: 50%;
+      border: 1px solid #111;
+    }
+    .edge-swatch {
+      width: 24px;
+      height: 0;
+      border-top: 2px solid #c7ced8;
+    }
+    .edge-swatch.bridge { border-top-color: #7a550d; }
+    main {
+      position: relative;
+      min-width: 0;
+    }
+    canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      background: #f7f8fb;
+    }
+    .hud {
+      position: absolute;
+      left: 18px;
+      top: 18px;
+      background: rgba(255, 255, 255, 0.94);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 11px;
+      pointer-events: none;
+      min-width: 260px;
+      box-shadow: var(--shadow);
+    }
+    .hud strong { display: block; margin-bottom: 2px; }
+    .hud span { color: var(--muted); }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <h1>DiRe Neo4j</h1>
+      <p class="sub">
+        <span id="activeBadge" class="badge">active</span>
+        <span id="loadedBadge" class="badge">loading</span>
+      </p>
+
+      <div class="section-title">Embedding</div>
+      <div class="run-list" id="runList"></div>
+
+      <div class="section-title">View</div>
+      <div class="segmented" id="modeButtons">
+        <button data-mode="single">Single</button>
+        <button data-mode="compare">Compare</button>
+      </div>
+
+      <div class="section-title">Cypher</div>
+      <details class="info" open>
+        <summary>Editable source queries</summary>
+        <p><b>Nodes</b></p>
+        <textarea class="cypher" id="nodeQuery" spellcheck="false"></textarea>
+        <p><b>Edges</b></p>
+        <textarea class="cypher" id="edgeQuery" spellcheck="false"></textarea>
+        <div class="query-actions">
+          <button class="primary" id="runCypher">Run</button>
+          <button id="resetCypher">Reset</button>
+        </div>
+        <p class="query-status" id="queryStatus">Loading default graph.</p>
+      </details>
+
+      <div class="section-title">Vertices</div>
+      <div class="range-control">
+        <header><span>Displayed</span><output id="vertexOutput">All</output></header>
+        <input id="vertexCount" type="range" min="1" max="1" value="1">
+      </div>
+
+      <div class="section-title">Run Stats</div>
+      <div class="stats">
+        <div class="stat"><label>Shown nodes</label><strong id="nodeCount">-</strong></div>
+        <div class="stat"><label>Shown edges</label><strong id="edgeCount">-</strong></div>
+        <div class="stat"><label>Stress</label><strong id="stress">-</strong></div>
+        <div class="stat"><label>Mean edge len.</label><strong id="meanEdge">-</strong></div>
+      </div>
+
+      <div class="section-title">Validation</div>
+      <div class="stats">
+        <div class="stat"><label>Components</label><strong id="components">-</strong></div>
+        <div class="stat"><label>Largest comp.</label><strong id="largest">-</strong></div>
+        <div class="stat"><label>Local edges</label><strong id="localEdges">-</strong></div>
+        <div class="stat"><label>Bridge edges</label><strong id="bridgeEdges">-</strong></div>
+      </div>
+
+      <div class="section-title">Categories</div>
+      <div class="legend" id="legend"></div>
+
+      <div class="section-title">Edges</div>
+      <div class="legend">
+        <div class="legend-row"><span class="legend-label"><span class="edge-swatch"></span>Local</span><span id="edgeLegendLocal">-</span></div>
+        <div class="legend-row"><span class="legend-label"><span class="edge-swatch bridge"></span>Bridge</span><span id="edgeLegendBridge">-</span></div>
+      </div>
+
+      <div class="section-title">Controls</div>
+      <div class="controls">
+        <button id="reset">Fit</button>
+        <label><input id="edges" type="checkbox" checked> Edges</label>
+        <label><input id="bridges" type="checkbox" checked> Bridges</label>
+        <label><input id="labels" type="checkbox"> Labels</label>
+      </div>
+    </aside>
+    <main>
+      <canvas id="canvas"></canvas>
+      <div class="hud" id="hud"><strong>Loading</strong><span>Waiting for Neo4j data.</span></div>
+    </main>
+  </div>
+  <script src="./viewer-script"></script>
+</body>
+</html>
