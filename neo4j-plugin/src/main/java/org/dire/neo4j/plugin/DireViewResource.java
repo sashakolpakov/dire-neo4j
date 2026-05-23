@@ -69,7 +69,8 @@ public class DireViewResource {
 
     private static final List<String> PALETTE = List.of(
             "#2A6FBB", "#C23B3B", "#2C8C62", "#7A4BA0",
-            "#C96F22", "#2B8AA0", "#6B7280", "#B4387A"
+            "#C96F22", "#2B8AA0", "#B4387A", "#6B7280",
+            "#8B8F00", "#D65F00", "#009E73", "#CC79A7"
     );
 
     @Context
@@ -452,11 +453,21 @@ public class DireViewResource {
 
     private Map<String, String> colors(Set<String> groups) {
         Map<String, String> colors = new LinkedHashMap<>();
-        Map<String, String> preferred = Map.of(
-                "Algebra", "#2A6FBB",
-                "Topology", "#C23B3B",
-                "Geometry", "#2C8C62",
-                "Analysis", "#7A4BA0"
+        Map<String, String> preferred = Map.ofEntries(
+                Map.entry("Algebra", "#2A6FBB"),
+                Map.entry("Topology", "#C23B3B"),
+                Map.entry("Geometry", "#2C8C62"),
+                Map.entry("Analysis", "#7A4BA0"),
+                Map.entry("0", "#2A6FBB"),
+                Map.entry("1", "#E69F00"),
+                Map.entry("2", "#009E73"),
+                Map.entry("3", "#D55E00"),
+                Map.entry("4", "#7A4BA0"),
+                Map.entry("5", "#8B5A2B"),
+                Map.entry("6", "#56B4E9"),
+                Map.entry("7", "#CC79A7"),
+                Map.entry("8", "#6B7280"),
+                Map.entry("9", "#8B8F00")
         );
         int index = 0;
         for (String group : groups) {
