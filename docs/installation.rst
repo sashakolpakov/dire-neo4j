@@ -17,6 +17,21 @@ Installed procedures:
 The viewer is not a Neo4j Browser extension. It is served by Neo4j at
 ``/dire/`` after the unmanaged extension is enabled.
 
+Install From A Release
+----------------------
+
+Download the jar for your Neo4j line from GitHub Releases:
+https://github.com/sashakolpakov/dire-neo4j/releases. Release assets are named
+with both the plugin and Neo4j versions, for example:
+
+.. code-block:: text
+
+   dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar
+
+Use this with a self-managed Neo4j server that allows custom server plugins.
+Managed Neo4j services such as Aura do not allow installing arbitrary plugin
+jars.
+
 Build From Source
 -----------------
 
@@ -43,7 +58,7 @@ Stop Neo4j before replacing plugin jars.
 
 .. code-block:: sh
 
-   cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar "$NEO4J_HOME/plugins/"
+   cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 
 Add to ``neo4j.conf``:
 
@@ -65,9 +80,8 @@ Homebrew Neo4j
    export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
    export PATH="$JAVA_HOME/bin:$PATH"
 
-   mvn package
-   cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
-     "$(brew --prefix neo4j)/libexec/plugins/"
+   cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar \
+     "$(brew --prefix neo4j)/libexec/plugins/dire-neo4j-plugin.jar"
 
 Edit:
 
@@ -89,14 +103,15 @@ Docker
    docker run --rm \
      --name dire-neo4j \
      -p 7474:7474 -p 7687:7687 \
-     -v "$PWD/neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar:/plugins/dire-neo4j-plugin.jar" \
+     -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar:/plugins/dire-neo4j-plugin.jar:ro" \
      -e NEO4J_AUTH=neo4j/password \
      -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
      -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
      -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
-     neo4j:latest
+     neo4j:5.26.0
 
-Pin the Neo4j image version for repeatable deployments.
+The same command works with a locally built jar if you replace the mounted jar
+path with ``neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar``.
 
 Verify
 ------

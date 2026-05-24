@@ -1,0 +1,127 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish plugin release
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Validate release version
+        id: version
+        shell: bash
+        run: |
+          project_version="$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
+          neo4j_version="$(mvn -q -DforceStdout help:evaluate -Dexpression=neo4j.version)"
+
+          if [[ "$project_version" == *-SNAPSHOT ]]; then
+            echo "::error::Refusing to publish a SNAPSHOT version: $project_version"
+            exit 1
+          fi
+
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" && "${GITHUB_REF_NAME#v}" != "$project_version" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} does not match project version ${project_version}"
+            exit 1
+          fi
+
+          tag_name="v${project_version}"
+          if [[ "${GITHUB_REF_TYPE:-}" == "tag" ]]; then
+            tag_name="${GITHUB_REF_NAME}"
+          fi
+
+          {
+            echo "project_version=$project_version"
+            echo "neo4j_version=$neo4j_version"
+            echo "tag_name=$tag_name"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Maven verify
+        run: mvn -B -ntp verify
+
+      - name: Smoke test installable plugin
+        env:
+          NEO4J_VERSION: ${{ steps.version.outputs.neo4j_version }}
+        run: scripts/neo4j-smoke.sh
+
+      - name: Prepare release artifact
+        id: artifact
+        shell: bash
+        env:
+          PROJECT_VERSION: ${{ steps.version.outputs.project_version }}
+          NEO4J_VERSION: ${{ steps.version.outputs.neo4j_version }}
+        run: |
+          mkdir -p dist
+          source_jar="neo4j-plugin/target/dire-neo4j-plugin-${PROJECT_VERSION}.jar"
+          release_jar="dist/dire-neo4j-plugin-${PROJECT_VERSION}-neo4j-${NEO4J_VERSION}.jar"
+
+          if [[ ! -f "$source_jar" ]]; then
+            echo "::error::Expected shaded jar not found: $source_jar"
+            exit 1
+          fi
+
+          cp "$source_jar" "$release_jar"
+          shasum -a 256 "$release_jar" > "${release_jar}.sha256"
+
+          cat > dist/RELEASE_NOTES.md <<NOTES
+          dire-neo4j ${PROJECT_VERSION}
+
+          Compatibility:
+          - Neo4j ${NEO4J_VERSION}
+          - Self-managed Neo4j servers with custom plugins enabled
+
+          Install:
+          1. Download the jar attached to this release.
+          2. Copy it to the Neo4j plugins directory.
+          3. Add the dire.* allowlist, unrestricted procedure setting, and /dire unmanaged extension setting.
+          4. Restart Neo4j and verify with SHOW PROCEDURES.
+
+          The SHA-256 checksum is attached next to the jar.
+          NOTES
+
+          {
+            echo "release_jar=$release_jar"
+            echo "checksum=${release_jar}.sha256"
+            echo "notes=dist/RELEASE_NOTES.md"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Publish GitHub release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ steps.version.outputs.tag_name }}
+          PROJECT_VERSION: ${{ steps.version.outputs.project_version }}
+          RELEASE_JAR: ${{ steps.artifact.outputs.release_jar }}
+          CHECKSUM: ${{ steps.artifact.outputs.checksum }}
+          NOTES: ${{ steps.artifact.outputs.notes }}
+        run: |
+          if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG_NAME" "$RELEASE_JAR" "$CHECKSUM" \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$TAG_NAME" "$RELEASE_JAR" "$CHECKSUM" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "dire-neo4j ${PROJECT_VERSION}" \
+              --notes-file "$NOTES"
+          fi

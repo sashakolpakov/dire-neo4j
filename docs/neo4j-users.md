@@ -25,9 +25,21 @@ Neo4j process after the jar is installed.
 The current build targets the Neo4j Java API declared in `pom.xml` and is tested
 locally against the Homebrew Neo4j package.
 
-## Build The Jar
+Managed Neo4j services such as Aura do not allow installing arbitrary server
+plugin jars.
 
-From the repository root:
+## Get The Jar
+
+For normal installation, download the release asset that matches your Neo4j
+line from <https://github.com/sashakolpakov/dire-neo4j/releases>. Release
+assets include both versions in the filename:
+
+```text
+dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar
+```
+
+To build the jar yourself, run this from the repository root:
+
 
 ```sh
 mvn package
@@ -46,7 +58,7 @@ Stop Neo4j before replacing plugins.
 Copy the jar into the Neo4j plugins directory:
 
 ```sh
-cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar "$NEO4J_HOME/plugins/"
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 ```
 
 Add these settings to `neo4j.conf`:
@@ -64,9 +76,8 @@ Restart Neo4j.
 ```sh
 brew install neo4j
 
-mvn package
-cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
-  "$(brew --prefix neo4j)/libexec/plugins/"
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar \
+  "$(brew --prefix neo4j)/libexec/plugins/dire-neo4j-plugin.jar"
 ```
 
 Edit:
@@ -89,15 +100,16 @@ Mount the jar into `/plugins` and pass the required Neo4j settings:
 docker run --rm \
   --name dire-neo4j \
   -p 7474:7474 -p 7687:7687 \
-  -v "$PWD/neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar:/plugins/dire-neo4j-plugin.jar" \
+  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar:/plugins/dire-neo4j-plugin.jar:ro" \
   -e NEO4J_AUTH=neo4j/password \
   -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
   -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
   -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
-  neo4j:latest
+  neo4j:5.26.0
 ```
 
-For production, pin the Neo4j image version instead of using `latest`.
+The same command works with a locally built jar if you replace the mounted jar
+path with `neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar`.
 
 ## Verify Installation
 
