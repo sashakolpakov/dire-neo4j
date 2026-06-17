@@ -17,6 +17,10 @@ final class PrimitiveLongList {
         return Arrays.copyOf(values, size);
     }
 
+    long[] values() {
+        return values;
+    }
+
     int size() {
         return size;
     }

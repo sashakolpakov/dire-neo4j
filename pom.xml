@@ -15,6 +15,7 @@
     <modules>
         <module>java-core</module>
         <module>neo4j-plugin</module>
+        <module>benchmarks</module>
     </modules>
 
     <properties>
@@ -22,6 +23,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <neo4j.version>5.26.0</neo4j.version>
         <junit.version>5.10.2</junit.version>
+        <jmh.version>1.37</jmh.version>
     </properties>
 
     <dependencyManagement>

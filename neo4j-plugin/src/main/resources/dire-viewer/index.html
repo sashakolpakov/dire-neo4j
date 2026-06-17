@@ -289,14 +289,14 @@
 
       <div class="section-title">Cypher</div>
       <details class="info" open>
-        <summary>Editable source queries</summary>
+        <summary>Built-in source queries</summary>
+        <p>Custom viewer Cypher is disabled; the unmanaged viewer only loads the bounded built-in payload.</p>
         <p><b>Nodes</b></p>
-        <textarea class="cypher" id="nodeQuery" spellcheck="false"></textarea>
+        <textarea class="cypher" id="nodeQuery" spellcheck="false" readonly></textarea>
         <p><b>Edges</b></p>
-        <textarea class="cypher" id="edgeQuery" spellcheck="false"></textarea>
+        <textarea class="cypher" id="edgeQuery" spellcheck="false" readonly></textarea>
         <div class="query-actions">
-          <button class="primary" id="runCypher">Run</button>
-          <button id="resetCypher">Reset</button>
+          <button class="primary" id="reloadData">Reload</button>
         </div>
         <p class="query-status" id="queryStatus">Loading default graph.</p>
       </details>

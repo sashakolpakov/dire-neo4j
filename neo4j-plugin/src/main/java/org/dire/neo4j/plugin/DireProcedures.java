@@ -15,6 +15,7 @@ import org.neo4j.procedure.Procedure;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
 public class DireProcedures {
@@ -27,11 +28,8 @@ public class DireProcedures {
         DireConfig config = DireConfig.parse(rawConfig);
         GraphProjection projection = GraphProjectionLoader.load(tx, config, needsWarmStart(config));
         LayoutResult layout = new DiReLayout().run(projection.graph, config.layoutConfig, projection.warmStart);
-        List<StreamResult> rows = new ArrayList<>(layout.nodeCount());
-        for (int i = 0; i < layout.nodeCount(); i++) {
-            rows.add(StreamResult.from(layout, i));
-        }
-        return rows.stream();
+        return IntStream.range(0, layout.nodeCount())
+                .mapToObj(i -> StreamResult.from(layout, i, projection.elementId(i), config.includeEmbedding));
     }
 
     @Procedure(name = "dire.layout.write", mode = Mode.WRITE)
@@ -44,7 +42,9 @@ public class DireProcedures {
         int nodesWritten = 0;
         int dimensions = layout.dimensions();
         for (int i = 0; i < layout.nodeCount(); i++) {
-            Node node = tx.getNodeById(layout.nodeId(i));
+            Node node = projection.usesElementIds()
+                    ? tx.getNodeByElementId(projection.elementId(i))
+                    : tx.getNodeById(layout.nodeId(i));
             for (int dim = 0; dim < dimensions; dim++) {
                 node.setProperty(config.writeProperties.get(dim), (double) layout.coordinate(i, dim));
             }
@@ -99,7 +99,9 @@ public class DireProcedures {
                 nodeCount,
                 relationshipCount,
                 input.dimensions(),
-                input.relationshipMode());
+                input.relationshipMode(),
+                input.initializationMode() == InitializationMode.WARM_START,
+                input.includeEmbedding());
 
         EstimateResult result = new EstimateResult();
         result.nodeCount = estimate.nodeCount();
@@ -123,6 +125,7 @@ public class DireProcedures {
 
     public static final class StreamResult {
         public long nodeId;
+        public String elementId;
         public double x;
         public double y;
         public Double z;
@@ -132,15 +135,19 @@ public class DireProcedures {
         public List<Double> embedding;
         public List<Double> initialEmbedding;
 
-        static StreamResult from(LayoutResult layout, int index) {
+        static StreamResult from(LayoutResult layout, int index, String elementId, boolean includeEmbedding) {
             StreamResult result = new StreamResult();
             result.nodeId = layout.nodeId(index);
+            result.elementId = elementId;
             result.x = layout.coordinate(index, 0);
             result.y = layout.coordinate(index, 1);
             result.z = layout.dimensions() == 3 ? (double) layout.coordinate(index, 2) : null;
             result.initialX = layout.initialCoordinate(index, 0);
             result.initialY = layout.initialCoordinate(index, 1);
             result.initialZ = layout.dimensions() == 3 ? (double) layout.initialCoordinate(index, 2) : null;
+            if (!includeEmbedding) {
+                return result;
+            }
             float[] embedding = layout.embeddingCopy(index);
             result.embedding = new ArrayList<>(embedding.length);
             for (float value : embedding) {

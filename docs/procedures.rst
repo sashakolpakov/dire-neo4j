@@ -31,10 +31,10 @@ Runs a layout and streams coordinates without writing to Neo4j.
 Returned columns include:
 
 * ``nodeId``
+* ``elementId`` when the projection uses ``elementId(...)`` inputs
 * ``x``, ``y``, optional ``z``
 * ``initialX``, ``initialY``, optional ``initialZ``
-* ``embedding``
-* ``initialEmbedding``
+* ``embedding`` and ``initialEmbedding`` only when ``includeEmbedding: true``
 
 ``dire.layout.stats``
 ---------------------
@@ -80,6 +80,12 @@ Configuration Reference
    * - ``concurrency``
      - ``min(availableProcessors, 8)``
      - worker threads
+   * - ``includeEmbedding``
+     - ``false``
+     - include boxed ``embedding`` and ``initialEmbedding`` lists in stream results
+   * - ``maxProjectionBytes``
+     - unset
+     - optional fail-fast projection memory cap
    * - ``attractionStrength``
      - ``1.0``
      - relationship attraction multiplier
@@ -99,7 +105,9 @@ Configuration Reference
 Projection Rules
 ----------------
 
-* ``nodeQuery`` must return numeric ``id`` values.
-* ``relationshipQuery`` must return numeric ``source`` and ``target`` values.
+* ``nodeQuery`` must return numeric ``id`` values or string ``elementId(...)``
+  values as ``id``.
+* ``relationshipQuery`` must return matching numeric or string ``source`` and
+  ``target`` values.
 * Optional ``weight`` values must be finite and non-negative.
 * Relationships whose endpoints are not present in ``nodeQuery`` cannot be used.

@@ -16,4 +16,12 @@ final class PrimitiveFloatList {
     float[] toArray() {
         return Arrays.copyOf(values, size);
     }
+
+    float[] values() {
+        return values;
+    }
+
+    int size() {
+        return size;
+    }
 }

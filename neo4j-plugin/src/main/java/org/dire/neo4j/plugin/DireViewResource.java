@@ -117,13 +117,14 @@ public class DireViewResource {
     public Response query(
             @FormParam("nodeQuery") String nodeQuery,
             @FormParam("edgeQuery") String edgeQuery) {
-        String nodes = normalizeQuery(nodeQuery, DEFAULT_NODE_QUERY);
-        String edges = normalizeQuery(edgeQuery, DEFAULT_EDGE_QUERY);
-        try {
-            return json(loadPayload(nodes, edges));
-        } catch (RuntimeException error) {
-            return error(error);
-        }
+        Map<String, Object> payload = new LinkedHashMap<>();
+        payload.put("message", "Custom viewer Cypher is disabled. Use GET /api/data for the built-in read-only viewer payload.");
+        payload.put("error", "CustomCypherDisabled");
+        return Response.status(Response.Status.FORBIDDEN)
+                .type(MediaType.APPLICATION_JSON)
+                .entity(toJson(payload))
+                .header("Cache-Control", "no-store")
+                .build();
     }
 
     private Response textResource(String name, String mediaType) {
@@ -237,7 +238,6 @@ public class DireViewResource {
             while (result.hasNext()) {
                 rows.add(new LinkedHashMap<>(result.next()));
             }
-            tx.commit();
             return rows;
         } catch (RuntimeException error) {
             throw new IllegalArgumentException("Cypher failed: " + message(error), error);
@@ -549,13 +549,6 @@ public class DireViewResource {
     @SuppressWarnings("unchecked")
     private List<Map<String, Object>> typedList(Object value) {
         return (List<Map<String, Object>>) value;
-    }
-
-    private String normalizeQuery(String query, String fallback) {
-        if (query == null || query.isBlank()) {
-            return fallback;
-        }
-        return query;
     }
 
     private static Number number(Object value) {

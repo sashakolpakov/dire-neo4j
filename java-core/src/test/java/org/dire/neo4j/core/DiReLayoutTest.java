@@ -80,6 +80,16 @@ class DiReLayoutTest {
         assertTrue(estimate.bytes() > 0);
     }
 
+    @Test
+    void memoryEstimateIncludesOptionalWarmStartAndEmbeddings() {
+        MemoryEstimate base = MemoryEstimate.estimate(100, 200, 2, RelationshipMode.UNDIRECTED);
+        MemoryEstimate warmStart = MemoryEstimate.estimate(100, 200, 2, RelationshipMode.UNDIRECTED, true, false);
+        MemoryEstimate embeddings = MemoryEstimate.estimate(100, 200, 2, RelationshipMode.UNDIRECTED, false, true);
+
+        assertTrue(warmStart.bytes() > base.bytes());
+        assertTrue(embeddings.bytes() > base.bytes());
+    }
+
     private static CsrGraph cycle(int n) {
         long[] nodeIds = new long[n];
         long[] sources = new long[n];

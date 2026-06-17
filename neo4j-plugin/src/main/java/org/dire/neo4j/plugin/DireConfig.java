@@ -17,6 +17,8 @@ final class DireConfig {
     final List<String> writeInitialProperties;
     final List<String> warmStartProperties;
     final LayoutConfig layoutConfig;
+    final Long maxProjectionBytes;
+    final boolean includeEmbedding;
 
     private DireConfig(
             String nodeQuery,
@@ -25,7 +27,9 @@ final class DireConfig {
             List<String> writeProperties,
             List<String> writeInitialProperties,
             List<String> warmStartProperties,
-            LayoutConfig layoutConfig) {
+            LayoutConfig layoutConfig,
+            Long maxProjectionBytes,
+            boolean includeEmbedding) {
         this.nodeQuery = nodeQuery;
         this.relationshipQuery = relationshipQuery;
         this.parameters = parameters;
@@ -33,6 +37,8 @@ final class DireConfig {
         this.writeInitialProperties = writeInitialProperties;
         this.warmStartProperties = warmStartProperties;
         this.layoutConfig = layoutConfig;
+        this.maxProjectionBytes = maxProjectionBytes;
+        this.includeEmbedding = includeEmbedding;
     }
 
     static DireConfig parse(Map<String, Object> config) {
@@ -82,7 +88,9 @@ final class DireConfig {
                 writeProperties,
                 writeInitialProperties,
                 warmStartProperties,
-                layoutConfig);
+                layoutConfig,
+                positiveOptionalLong(config, "maxProjectionBytes"),
+                bool(config, "includeEmbedding", false));
     }
 
     static EstimateInput parseEstimate(Map<String, Object> config) {
@@ -91,6 +99,7 @@ final class DireConfig {
         }
         int dimensions = integer(config, "dimensions", 2);
         RelationshipMode relationshipMode = relationshipMode(string(config, "relationshipMode", "undirected"));
+        InitializationMode initializationMode = initializationMode(string(config, "initialization", "spectral"));
         return new EstimateInput(
                 string(config, "nodeQuery", null),
                 string(config, "relationshipQuery", null),
@@ -98,7 +107,9 @@ final class DireConfig {
                 optionalLong(config, "nodeCount"),
                 optionalLong(config, "relationshipCount"),
                 dimensions,
-                relationshipMode);
+                relationshipMode,
+                initializationMode,
+                bool(config, "includeEmbedding", false));
     }
 
     @SuppressWarnings("unchecked")
@@ -135,6 +146,17 @@ final class DireConfig {
         return number.intValue();
     }
 
+    private static boolean bool(Map<String, Object> config, String key, boolean defaultValue) {
+        Object value = config.get(key);
+        if (value == null) {
+            return defaultValue;
+        }
+        if (!(value instanceof Boolean flag)) {
+            throw new IllegalArgumentException(key + " must be boolean");
+        }
+        return flag;
+    }
+
     private static long longValue(Map<String, Object> config, String key, long defaultValue) {
         Object value = config.get(key);
         if (value == null) {
@@ -155,6 +177,17 @@ final class DireConfig {
             throw new IllegalArgumentException(key + " must be numeric");
         }
         return number.longValue();
+    }
+
+    private static Long positiveOptionalLong(Map<String, Object> config, String key) {
+        Long value = optionalLong(config, key);
+        if (value == null) {
+            return null;
+        }
+        if (value <= 0L) {
+            throw new IllegalArgumentException(key + " must be positive");
+        }
+        return value;
     }
 
     private static float floatValue(Map<String, Object> config, String key, float defaultValue) {
@@ -225,6 +258,8 @@ final class DireConfig {
             Long nodeCount,
             Long relationshipCount,
             int dimensions,
-            RelationshipMode relationshipMode) {
+            RelationshipMode relationshipMode,
+            InitializationMode initializationMode,
+            boolean includeEmbedding) {
     }
 }

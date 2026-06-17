@@ -143,10 +143,14 @@ public final class DiReLayout {
                     continue;
                 }
                 int targetBase = j * dimensions;
+                float dx = positions[targetBase] - positions[sourceBase];
+                float dy = positions[targetBase + 1] - positions[sourceBase + 1];
+                float dz = dimensions == 3 ? positions[targetBase + 2] - positions[sourceBase + 2] : 0.0f;
                 double distSq = 1.0e-10;
-                for (int dim = 0; dim < dimensions; dim++) {
-                    double delta = positions[targetBase + dim] - positions[sourceBase + dim];
-                    distSq += delta * delta;
+                distSq += dx * dx;
+                distSq += dy * dy;
+                if (dimensions == 3) {
+                    distSq += dz * dz;
                 }
                 double dist = Math.sqrt(distSq);
                 double distSqB = Math.pow(distSq, kernel.b);
@@ -155,9 +159,10 @@ public final class DiReLayout {
                         * distSqB
                         / (distSqB + kernel.a)
                         / dist;
-                for (int dim = 0; dim < dimensions; dim++) {
-                    float delta = positions[targetBase + dim] - positions[sourceBase + dim];
-                    forces[sourceBase + dim] += (float) (coefficient * delta);
+                forces[sourceBase] += (float) (coefficient * dx);
+                forces[sourceBase + 1] += (float) (coefficient * dy);
+                if (dimensions == 3) {
+                    forces[sourceBase + 2] += (float) (coefficient * dz);
                 }
             }
         }
@@ -226,10 +231,14 @@ public final class DiReLayout {
                     j++;
                 }
                 int targetBase = j * dimensions;
+                float dx = positions[targetBase] - positions[sourceBase];
+                float dy = positions[targetBase + 1] - positions[sourceBase + 1];
+                float dz = dimensions == 3 ? positions[targetBase + 2] - positions[sourceBase + 2] : 0.0f;
                 double distSq = 1.0e-10;
-                for (int dim = 0; dim < dimensions; dim++) {
-                    double delta = positions[targetBase + dim] - positions[sourceBase + dim];
-                    distSq += delta * delta;
+                distSq += dx * dx;
+                distSq += dy * dy;
+                if (dimensions == 3) {
+                    distSq += dz * dz;
                 }
                 double dist = Math.sqrt(distSq);
                 double distSqB = Math.pow(distSq, kernel.b);
@@ -237,9 +246,10 @@ public final class DiReLayout {
                         / (1.0 + kernel.a * distSqB)
                         * Math.exp(-dist / config.cutoff())
                         / dist;
-                for (int dim = 0; dim < dimensions; dim++) {
-                    float delta = positions[targetBase + dim] - positions[sourceBase + dim];
-                    forces[sourceBase + dim] += (float) (coefficient * delta);
+                forces[sourceBase] += (float) (coefficient * dx);
+                forces[sourceBase + 1] += (float) (coefficient * dy);
+                if (dimensions == 3) {
+                    forces[sourceBase + 2] += (float) (coefficient * dz);
                 }
             }
         }

@@ -62,11 +62,15 @@ CALL dire.layout.stream({
     RETURN id(a) AS source, id(b) AS target, coalesce(r.weight, 1.0) AS weight
   ',
   iterations: 200,
-  randomSeed: 42
+  randomSeed: 42,
+  includeEmbedding: true
 })
 YIELD nodeId, initialX, initialY, x, y, initialEmbedding, embedding
 RETURN nodeId, initialX, initialY, x, y, initialEmbedding, embedding;
 ```
+
+`includeEmbedding` defaults to `false` to avoid allocating boxed coordinate
+lists for every streamed row. The scalar coordinate columns are always returned.
 
 ## Write
 

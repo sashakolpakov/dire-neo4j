@@ -374,30 +374,6 @@ async function loadDefault() {
   applyData(payload, `Loaded ${nodeText} and ${payload.totalEdges.toLocaleString()} edges.`);
 }
 
-async function runCypher() {
-  queryStatus.textContent = "Running Cypher.";
-  const body = new URLSearchParams();
-  body.set("nodeQuery", nodeQuery.value);
-  body.set("edgeQuery", edgeQuery.value);
-  const response = await fetch("./api/query", {
-    method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body,
-  });
-  const text = await response.text();
-  let payload;
-  try {
-    payload = JSON.parse(text);
-  } catch {
-    throw new Error(text || `HTTP ${response.status}`);
-  }
-  if (!response.ok) throw new Error(payload.message || text);
-  const nodeText = payload.sourceNodes > payload.totalNodes
-    ? `${payload.totalNodes.toLocaleString()} of ${payload.sourceNodes.toLocaleString()} nodes`
-    : `${payload.totalNodes.toLocaleString()} nodes`;
-  applyData(payload, `Loaded ${nodeText} and ${payload.totalEdges.toLocaleString()} edges.`);
-}
-
 function nearest(clientX, clientY) {
   if (!DATA || mode === "compare") return null;
   const r = rect();
@@ -430,8 +406,7 @@ document.getElementById("reset").onclick = () => { fit(); draw(); };
 document.getElementById("edges").onchange = e => { drawEdges = e.target.checked; draw(); };
 document.getElementById("bridges").onchange = e => { drawBridges = e.target.checked; draw(); };
 document.getElementById("labels").onchange = e => { drawLabels = e.target.checked; draw(); };
-document.getElementById("runCypher").onclick = () => runCypher().catch(showError);
-document.getElementById("resetCypher").onclick = () => loadDefault().catch(showError);
+document.getElementById("reloadData").onclick = () => loadDefault().catch(showError);
 document.getElementById("vertexCount").oninput = e => {
   visibleCount = Number(e.target.value);
   updateUi();
@@ -469,7 +444,7 @@ canvas.addEventListener("wheel", e => {
 
 function showError(error) {
   queryStatus.textContent = error.message;
-  hud.innerHTML = `<strong>Cypher error</strong><span>${error.message}</span>`;
+  hud.innerHTML = `<strong>Viewer error</strong><span>${error.message}</span>`;
 }
 
 window.addEventListener("resize", resize);

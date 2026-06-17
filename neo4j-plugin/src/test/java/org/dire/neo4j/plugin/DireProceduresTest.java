@@ -15,6 +15,8 @@ import java.util.Map;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DireProceduresTest {
@@ -30,7 +32,8 @@ class DireProceduresTest {
                           nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id ORDER BY id(n)',
                           relationshipQuery: 'MATCH (a:Paper)-[r:CITES]->(b:Paper) RETURN id(a) AS source, id(b) AS target, coalesce(r.weight, 1.0) AS weight',
                           iterations: 5,
-                          randomSeed: 42
+                          randomSeed: 42,
+                          includeEmbedding: true
                         })
                         YIELD nodeId, x, y, initialX, initialY, embedding, initialEmbedding
                         RETURN nodeId, x, y, initialX, initialY, embedding, initialEmbedding
@@ -47,6 +50,38 @@ class DireProceduresTest {
                     assertTrue(Double.isFinite(((Number) row.get("initialY")).doubleValue()));
                     assertEquals(2, ((List<?>) row.get("embedding")).size());
                     assertEquals(2, ((List<?>) row.get("initialEmbedding")).size());
+                    rows++;
+                }
+                assertEquals(4, rows);
+                tx.commit();
+            }
+        }
+    }
+
+    @Test
+    void streamOmitsEmbeddingListsByDefault() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        CALL dire.layout.stream({
+                          nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id ORDER BY id(n)',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN id(a) AS source, id(b) AS target',
+                          iterations: 1
+                        })
+                        YIELD nodeId, embedding, initialEmbedding
+                        RETURN nodeId, embedding, initialEmbedding
+                        ORDER BY nodeId
+                        """);
+
+                int rows = 0;
+                while (result.hasNext()) {
+                    Map<String, Object> row = result.next();
+                    assertNotNull(row.get("nodeId"));
+                    assertNull(row.get("embedding"));
+                    assertNull(row.get("initialEmbedding"));
                     rows++;
                 }
                 assertEquals(4, rows);
@@ -103,6 +138,116 @@ class DireProceduresTest {
     }
 
     @Test
+    void streamAcceptsElementIdsWithSurrogateNodeIds() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        CALL dire.layout.stream({
+                          nodeQuery: 'MATCH (n:Paper) RETURN elementId(n) AS id ORDER BY n.name',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN elementId(a) AS source, elementId(b) AS target',
+                          iterations: 2,
+                          randomSeed: 42
+                        })
+                        YIELD nodeId, elementId, x, y
+                        RETURN nodeId, elementId, x, y
+                        ORDER BY nodeId
+                        """);
+
+                int rows = 0;
+                while (result.hasNext()) {
+                    Map<String, Object> row = result.next();
+                    assertEquals((long) rows, row.get("nodeId"));
+                    assertNotNull(row.get("elementId"));
+                    assertTrue(((String) row.get("elementId")).length() > 0);
+                    assertTrue(Double.isFinite(((Number) row.get("x")).doubleValue()));
+                    assertTrue(Double.isFinite(((Number) row.get("y")).doubleValue()));
+                    rows++;
+                }
+                assertEquals(4, rows);
+                tx.commit();
+            }
+        }
+    }
+
+    @Test
+    void writeWithElementIdsPersistsCoordinates() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        CALL dire.layout.write({
+                          nodeQuery: 'MATCH (n:Paper) RETURN elementId(n) AS id ORDER BY n.name',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN elementId(a) AS source, elementId(b) AS target',
+                          writeProperties: ['eid_x', 'eid_y'],
+                          iterations: 2,
+                          randomSeed: 42
+                        })
+                        YIELD nodesWritten, relationshipsRead
+                        RETURN nodesWritten, relationshipsRead
+                        """);
+                Map<String, Object> row = result.next();
+                assertEquals(4L, row.get("nodesWritten"));
+                assertEquals(4L, row.get("relationshipsRead"));
+                tx.commit();
+            }
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        MATCH (n:Paper)
+                        RETURN count(n) AS nodes, count(n.eid_x) AS xs, count(n.eid_y) AS ys
+                        """);
+                Map<String, Object> row = result.next();
+                assertEquals(4L, row.get("nodes"));
+                assertEquals(4L, row.get("xs"));
+                assertEquals(4L, row.get("ys"));
+                tx.commit();
+            }
+        }
+    }
+
+    @Test
+    void warmStartWithElementIdsReadsInitialCoordinates() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+            seedWarmStart(db);
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        CALL dire.layout.stream({
+                          nodeQuery: 'MATCH (n:Paper) RETURN elementId(n) AS id ORDER BY n.name',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN elementId(a) AS source, elementId(b) AS target',
+                          initialization: 'warm_start',
+                          warmStartProperties: ['warm_x', 'warm_y'],
+                          iterations: 0
+                        })
+                        YIELD nodeId, elementId, initialX, initialY
+                        RETURN nodeId, elementId, initialX, initialY
+                        ORDER BY nodeId
+                        """);
+
+                int rows = 0;
+                double[] normalized = {-1.3416407864998738, -0.4472135954999579, 0.4472135954999579, 1.3416407864998738};
+                while (result.hasNext()) {
+                    Map<String, Object> row = result.next();
+                    assertEquals((long) rows, row.get("nodeId"));
+                    assertNotNull(row.get("elementId"));
+                    assertEquals(normalized[rows], ((Number) row.get("initialX")).doubleValue(), 1.0e-6);
+                    assertEquals(-normalized[rows], ((Number) row.get("initialY")).doubleValue(), 1.0e-6);
+                    rows++;
+                }
+                assertEquals(4, rows);
+                tx.commit();
+            }
+        }
+    }
+
+    @Test
     void statsAndEstimateReturnUsefulMetadata() {
         try (Neo4j neo4j = database()) {
             GraphDatabaseService db = neo4j.defaultDatabaseService();
@@ -144,6 +289,46 @@ class DireProceduresTest {
     }
 
     @Test
+    void estimateReflectsWarmStartAndEmbeddingOptions() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+
+            try (Transaction tx = db.beginTx()) {
+                long base = estimateBytes(tx, """
+                        CALL dire.layout.estimate({
+                          nodeCount: 100,
+                          relationshipCount: 200
+                        })
+                        YIELD bytesMin
+                        RETURN bytesMin
+                        """);
+                long warmStart = estimateBytes(tx, """
+                        CALL dire.layout.estimate({
+                          nodeCount: 100,
+                          relationshipCount: 200,
+                          initialization: 'warm_start'
+                        })
+                        YIELD bytesMin
+                        RETURN bytesMin
+                        """);
+                long embeddings = estimateBytes(tx, """
+                        CALL dire.layout.estimate({
+                          nodeCount: 100,
+                          relationshipCount: 200,
+                          includeEmbedding: true
+                        })
+                        YIELD bytesMin
+                        RETURN bytesMin
+                        """);
+
+                assertTrue(warmStart > base);
+                assertTrue(embeddings > base);
+                tx.commit();
+            }
+        }
+    }
+
+    @Test
     void invalidConfigFailsClearly() {
         try (Neo4j neo4j = database()) {
             GraphDatabaseService db = neo4j.defaultDatabaseService();
@@ -160,7 +345,79 @@ class DireProceduresTest {
                         """);
                 assertFalse(result.hasNext());
             } catch (RuntimeException error) {
-                assertTrue(error.getMessage().contains("nodeQuery must return numeric column `id`"));
+                assertTrue(error.getMessage().contains("nodeQuery must return column `id`"));
+            }
+        }
+    }
+
+    @Test
+    void invalidIdentityValueFailsClearly() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        CALL dire.layout.stream({
+                          nodeQuery: 'MATCH (n:Paper) RETURN true AS id',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN id(a) AS source, id(b) AS target'
+                        })
+                        YIELD nodeId
+                        RETURN nodeId
+                        """);
+                assertFalse(result.hasNext());
+            } catch (RuntimeException error) {
+                assertTrue(error.getMessage().contains("numeric id or string elementId"), error.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void mixedIdentityModesFailClearly() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        CALL dire.layout.stream({
+                          nodeQuery: 'MATCH (n:Paper) RETURN elementId(n) AS id ORDER BY n.name',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN id(a) AS source, elementId(b) AS target'
+                        })
+                        YIELD nodeId
+                        RETURN nodeId
+                        """);
+                assertFalse(result.hasNext());
+            } catch (RuntimeException error) {
+                assertTrue(error.getMessage().contains("identity type must match"), error.getMessage());
+            }
+        }
+    }
+
+    @Test
+    void maxProjectionBytesRejectsProjectionBeforeMaterialization() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                RuntimeException error = assertThrows(RuntimeException.class, () -> {
+                    Result result = tx.execute("""
+                            CALL dire.layout.stream({
+                              nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
+                              relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN id(a) AS source, id(b) AS target',
+                              maxProjectionBytes: 1,
+                              iterations: 1
+                            })
+                            YIELD nodeId
+                            RETURN nodeId
+                            """);
+                    result.hasNext();
+                });
+                assertTrue(
+                        error.getMessage().contains("maxProjectionBytes")
+                                || error.getMessage().contains("projection memory"),
+                        error.getMessage());
             }
         }
     }
@@ -181,6 +438,25 @@ class DireProceduresTest {
             assertTrue(body.contains("\"totalEdges\":1"));
             assertTrue(body.contains("\"dire\""));
             assertTrue(body.contains("\"nodeQuery\""));
+        }
+    }
+
+    @Test
+    void unmanagedViewerRejectsCustomQueryWithoutMutatingDatabase() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedViewerGraph(db);
+
+            DireViewResource resource = new DireViewResource();
+            resource.db = db;
+            Response response = resource.query(
+                    "CREATE (:Pwned) RETURN 1 AS idx",
+                    "MATCH (a)-[r]->(b) RETURN id(a) AS source, id(b) AS target");
+            String body = (String) response.getEntity();
+
+            assertEquals(403, response.getStatus());
+            assertTrue(body.contains("CustomCypherDisabled"));
+            assertEquals(0L, countPwnedNodes(db));
         }
     }
 
@@ -233,6 +509,41 @@ class DireProceduresTest {
                     CREATE (:DireView {name: 'Current DiRe View', run: 'dire'})
                     """);
             tx.commit();
+        }
+    }
+
+    private static void seedWarmStart(GraphDatabaseService db) {
+        try (Transaction tx = db.beginTx()) {
+            tx.execute("""
+                    MATCH (n:Paper)
+                    SET n.warm_x = CASE n.name
+                        WHEN 'a' THEN 1.0
+                        WHEN 'b' THEN 2.0
+                        WHEN 'c' THEN 3.0
+                        ELSE 4.0
+                    END,
+                    n.warm_y = CASE n.name
+                        WHEN 'a' THEN -1.0
+                        WHEN 'b' THEN -2.0
+                        WHEN 'c' THEN -3.0
+                        ELSE -4.0
+                    END
+                    """);
+            tx.commit();
+        }
+    }
+
+    private static long estimateBytes(Transaction tx, String query) {
+        Result result = tx.execute(query);
+        return ((Number) result.next().get("bytesMin")).longValue();
+    }
+
+    private static long countPwnedNodes(GraphDatabaseService db) {
+        try (Transaction tx = db.beginTx()) {
+            Result result = tx.execute("MATCH (n:Pwned) RETURN count(n) AS count");
+            long count = ((Number) result.next().get("count")).longValue();
+            tx.commit();
+            return count;
         }
     }
 }
