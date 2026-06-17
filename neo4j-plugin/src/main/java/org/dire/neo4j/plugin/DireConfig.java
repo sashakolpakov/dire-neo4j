@@ -79,6 +79,7 @@ final class DireConfig {
                 .repulsionStrength(floatValue(config, "repulsionStrength", 1.0f))
                 .negativeSamples(integer(config, "negativeSamples", 16))
                 .concurrency(integer(config, "concurrency", LayoutConfig.defaultConcurrency()))
+                .fastKernel(bool(config, "fastKernel", false))
                 .build();
 
         return new DireConfig(

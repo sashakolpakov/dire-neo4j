@@ -4,6 +4,7 @@ import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DiReLayoutTest {
@@ -46,6 +47,91 @@ class DiReLayoutTest {
         LayoutResult single = new DiReLayout().run(graph, singleWorker);
         LayoutResult parallel = new DiReLayout().run(graph, multiWorker);
 
+        assertArrayEquals(single.positionsCopy(), parallel.positionsCopy(), 1.0e-6f);
+        assertArrayEquals(single.initialPositionsCopy(), parallel.initialPositionsCopy(), 1.0e-6f);
+    }
+
+    @Test
+    void fastKernelDefaultsFalseAndMatchesExplicitSlowPath() {
+        CsrGraph graph = cycle(16);
+        LayoutConfig defaultConfig = LayoutConfig.builder()
+                .iterations(8)
+                .randomSeed(11L)
+                .negativeSamples(4)
+                .concurrency(1)
+                .build();
+        LayoutConfig explicitSlow = LayoutConfig.builder()
+                .iterations(8)
+                .randomSeed(11L)
+                .negativeSamples(4)
+                .concurrency(1)
+                .fastKernel(false)
+                .build();
+
+        assertFalse(defaultConfig.fastKernel());
+
+        LayoutResult defaultResult = new DiReLayout().run(graph, defaultConfig);
+        LayoutResult slowResult = new DiReLayout().run(graph, explicitSlow);
+
+        assertArrayEquals(defaultResult.positionsCopy(), slowResult.positionsCopy());
+        assertArrayEquals(defaultResult.initialPositionsCopy(), slowResult.initialPositionsCopy());
+    }
+
+    @Test
+    void fastKernelFallsBackToSlowPathWhenExponentIsNotNearOne() {
+        assertFalse(KernelParameters.fit(1.0e-2f, 1.0f).isNearLinearExponent());
+
+        CsrGraph graph = cycle(16);
+        LayoutConfig slow = LayoutConfig.builder()
+                .iterations(8)
+                .randomSeed(23L)
+                .negativeSamples(4)
+                .concurrency(1)
+                .build();
+        LayoutConfig fastRequested = LayoutConfig.builder()
+                .iterations(8)
+                .randomSeed(23L)
+                .negativeSamples(4)
+                .concurrency(1)
+                .fastKernel(true)
+                .build();
+
+        LayoutResult slowResult = new DiReLayout().run(graph, slow);
+        LayoutResult fallbackResult = new DiReLayout().run(graph, fastRequested);
+
+        assertArrayEquals(slowResult.positionsCopy(), fallbackResult.positionsCopy());
+        assertArrayEquals(slowResult.initialPositionsCopy(), fallbackResult.initialPositionsCopy());
+    }
+
+    @Test
+    void fastKernelNearLinearPathIsDeterministicAndParallelSafe() {
+        assertTrue(KernelParameters.fit(0.2f, 1.0f).isNearLinearExponent());
+
+        CsrGraph graph = cycle(128);
+        LayoutConfig singleWorker = LayoutConfig.builder()
+                .minDist(0.2f)
+                .spread(1.0f)
+                .iterations(12)
+                .randomSeed(31L)
+                .negativeSamples(6)
+                .concurrency(1)
+                .fastKernel(true)
+                .build();
+        LayoutConfig multiWorker = LayoutConfig.builder()
+                .minDist(0.2f)
+                .spread(1.0f)
+                .iterations(12)
+                .randomSeed(31L)
+                .negativeSamples(6)
+                .concurrency(4)
+                .fastKernel(true)
+                .build();
+
+        LayoutResult single = new DiReLayout().run(graph, singleWorker);
+        LayoutResult parallel = new DiReLayout().run(graph, multiWorker);
+
+        assertFinite(single);
+        assertFinite(parallel);
         assertArrayEquals(single.positionsCopy(), parallel.positionsCopy(), 1.0e-6f);
         assertArrayEquals(single.initialPositionsCopy(), parallel.initialPositionsCopy(), 1.0e-6f);
     }

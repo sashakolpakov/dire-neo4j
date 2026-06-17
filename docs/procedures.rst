@@ -83,6 +83,9 @@ Configuration Reference
    * - ``includeEmbedding``
      - ``false``
      - include boxed ``embedding`` and ``initialEmbedding`` lists in stream results
+   * - ``fastKernel``
+     - ``false``
+     - opt-in shortcut for near-linear kernels; may slightly perturb coordinates
    * - ``maxProjectionBytes``
      - unset
      - optional fail-fast projection memory cap

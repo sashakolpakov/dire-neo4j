@@ -16,6 +16,7 @@ public final class LayoutConfig {
     private final float repulsionStrength;
     private final int negativeSamples;
     private final int concurrency;
+    private final boolean fastKernel;
 
     private LayoutConfig(Builder builder) {
         this.dimensions = builder.dimensions;
@@ -31,6 +32,7 @@ public final class LayoutConfig {
         this.repulsionStrength = builder.repulsionStrength;
         this.negativeSamples = builder.negativeSamples;
         this.concurrency = builder.concurrency;
+        this.fastKernel = builder.fastKernel;
         validate();
     }
 
@@ -94,6 +96,10 @@ public final class LayoutConfig {
         return concurrency;
     }
 
+    public boolean fastKernel() {
+        return fastKernel;
+    }
+
     private void validate() {
         if (dimensions < 2 || dimensions > 3) {
             throw new IllegalArgumentException("dimensions must be 2 or 3");
@@ -141,6 +147,7 @@ public final class LayoutConfig {
         private float repulsionStrength = 1.0f;
         private int negativeSamples = 16;
         private int concurrency = LayoutConfig.defaultConcurrency();
+        private boolean fastKernel = false;
 
         public Builder dimensions(int dimensions) {
             this.dimensions = dimensions;
@@ -204,6 +211,11 @@ public final class LayoutConfig {
 
         public Builder concurrency(int concurrency) {
             this.concurrency = concurrency;
+            return this;
+        }
+
+        public Builder fastKernel(boolean fastKernel) {
+            this.fastKernel = fastKernel;
             return this;
         }
 

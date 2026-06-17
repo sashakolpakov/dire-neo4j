@@ -30,6 +30,7 @@ public final class DiReLayout {
         float[] initialPositions = Arrays.copyOf(positions, positions.length);
         float[] forces = new float[n * dimensions];
         KernelParameters kernel = KernelParameters.fit(config.minDist(), config.spread());
+        boolean fastKernel = config.fastKernel() && kernel.isNearLinearExponent();
         int workers = workerCount(config, n);
         ExecutorService executor = workers > 1 ? Executors.newFixedThreadPool(workers) : null;
 
@@ -37,11 +38,11 @@ public final class DiReLayout {
             for (int iteration = 0; iteration < config.iterations(); iteration++) {
                 Arrays.fill(forces, 0.0f);
                 if (executor == null) {
-                    accumulateAttraction(graph, positions, forces, dimensions, kernel, config);
-                    accumulateRepulsion(positions, forces, n, dimensions, iteration, kernel, config);
+                    accumulateAttraction(graph, positions, forces, dimensions, kernel, config, fastKernel);
+                    accumulateRepulsion(positions, forces, n, dimensions, iteration, kernel, config, fastKernel);
                 } else {
-                    accumulateAttractionParallel(executor, workers, graph, positions, forces, dimensions, kernel, config);
-                    accumulateRepulsionParallel(executor, workers, positions, forces, n, dimensions, iteration, kernel, config);
+                    accumulateAttractionParallel(executor, workers, graph, positions, forces, dimensions, kernel, config, fastKernel);
+                    accumulateRepulsionParallel(executor, workers, positions, forces, n, dimensions, iteration, kernel, config, fastKernel);
                 }
                 clampForces(forces, config.cutoff());
                 float alpha = config.learningRate() * (1.0f - (iteration / (float) Math.max(1, config.iterations())));
@@ -98,8 +99,13 @@ public final class DiReLayout {
             float[] forces,
             int dimensions,
             KernelParameters kernel,
-            LayoutConfig config) {
-        accumulateAttractionRange(graph, positions, forces, dimensions, kernel, config, 0, graph.nodeCount());
+            LayoutConfig config,
+            boolean fastKernel) {
+        if (fastKernel) {
+            accumulateAttractionRangeFast(graph, positions, forces, dimensions, kernel, config, 0, graph.nodeCount());
+        } else {
+            accumulateAttractionRange(graph, positions, forces, dimensions, kernel, config, 0, graph.nodeCount());
+        }
     }
 
     private static void accumulateAttractionParallel(
@@ -110,17 +116,31 @@ public final class DiReLayout {
             float[] forces,
             int dimensions,
             KernelParameters kernel,
-            LayoutConfig config) {
-        invokeRanges(executor, workers, graph.nodeCount(),
-                (startInclusive, endExclusive) -> accumulateAttractionRange(
-                        graph,
-                        positions,
-                        forces,
-                        dimensions,
-                        kernel,
-                        config,
-                        startInclusive,
-                        endExclusive));
+            LayoutConfig config,
+            boolean fastKernel) {
+        if (fastKernel) {
+            invokeRanges(executor, workers, graph.nodeCount(),
+                    (startInclusive, endExclusive) -> accumulateAttractionRangeFast(
+                            graph,
+                            positions,
+                            forces,
+                            dimensions,
+                            kernel,
+                            config,
+                            startInclusive,
+                            endExclusive));
+        } else {
+            invokeRanges(executor, workers, graph.nodeCount(),
+                    (startInclusive, endExclusive) -> accumulateAttractionRange(
+                            graph,
+                            positions,
+                            forces,
+                            dimensions,
+                            kernel,
+                            config,
+                            startInclusive,
+                            endExclusive));
+        }
     }
 
     private static void accumulateAttractionRange(
@@ -168,6 +188,51 @@ public final class DiReLayout {
         }
     }
 
+    private static void accumulateAttractionRangeFast(
+            CsrGraph graph,
+            float[] positions,
+            float[] forces,
+            int dimensions,
+            KernelParameters kernel,
+            LayoutConfig config,
+            int startInclusive,
+            int endExclusive) {
+        int[] offsets = graph.offsets();
+        int[] targets = graph.targets();
+        float[] weights = graph.weights();
+        for (int i = startInclusive; i < endExclusive; i++) {
+            int sourceBase = i * dimensions;
+            for (int p = offsets[i]; p < offsets[i + 1]; p++) {
+                int j = targets[p];
+                if (i == j) {
+                    continue;
+                }
+                int targetBase = j * dimensions;
+                float dx = positions[targetBase] - positions[sourceBase];
+                float dy = positions[targetBase + 1] - positions[sourceBase + 1];
+                float dz = dimensions == 3 ? positions[targetBase + 2] - positions[sourceBase + 2] : 0.0f;
+                double distSq = 1.0e-10;
+                distSq += dx * dx;
+                distSq += dy * dy;
+                if (dimensions == 3) {
+                    distSq += dz * dz;
+                }
+                double dist = Math.sqrt(distSq);
+                double distSqB = distSq;
+                double coefficient = config.attractionStrength()
+                        * weights[p]
+                        * distSqB
+                        / (distSqB + kernel.a)
+                        / dist;
+                forces[sourceBase] += (float) (coefficient * dx);
+                forces[sourceBase + 1] += (float) (coefficient * dy);
+                if (dimensions == 3) {
+                    forces[sourceBase + 2] += (float) (coefficient * dz);
+                }
+            }
+        }
+    }
+
     private static void accumulateRepulsion(
             float[] positions,
             float[] forces,
@@ -175,11 +240,16 @@ public final class DiReLayout {
             int dimensions,
             int iteration,
             KernelParameters kernel,
-            LayoutConfig config) {
+            LayoutConfig config,
+            boolean fastKernel) {
         if (nodeCount <= 1 || config.negativeSamples() == 0 || config.repulsionStrength() == 0.0f) {
             return;
         }
-        accumulateRepulsionRange(positions, forces, nodeCount, dimensions, iteration, kernel, config, 0, nodeCount);
+        if (fastKernel) {
+            accumulateRepulsionRangeFast(positions, forces, nodeCount, dimensions, iteration, kernel, config, 0, nodeCount);
+        } else {
+            accumulateRepulsionRange(positions, forces, nodeCount, dimensions, iteration, kernel, config, 0, nodeCount);
+        }
     }
 
     private static void accumulateRepulsionParallel(
@@ -191,21 +261,36 @@ public final class DiReLayout {
             int dimensions,
             int iteration,
             KernelParameters kernel,
-            LayoutConfig config) {
+            LayoutConfig config,
+            boolean fastKernel) {
         if (nodeCount <= 1 || config.negativeSamples() == 0 || config.repulsionStrength() == 0.0f) {
             return;
         }
-        invokeRanges(executor, workers, nodeCount,
-                (startInclusive, endExclusive) -> accumulateRepulsionRange(
-                        positions,
-                        forces,
-                        nodeCount,
-                        dimensions,
-                        iteration,
-                        kernel,
-                        config,
-                        startInclusive,
-                        endExclusive));
+        if (fastKernel) {
+            invokeRanges(executor, workers, nodeCount,
+                    (startInclusive, endExclusive) -> accumulateRepulsionRangeFast(
+                            positions,
+                            forces,
+                            nodeCount,
+                            dimensions,
+                            iteration,
+                            kernel,
+                            config,
+                            startInclusive,
+                            endExclusive));
+        } else {
+            invokeRanges(executor, workers, nodeCount,
+                    (startInclusive, endExclusive) -> accumulateRepulsionRange(
+                            positions,
+                            forces,
+                            nodeCount,
+                            dimensions,
+                            iteration,
+                            kernel,
+                            config,
+                            startInclusive,
+                            endExclusive));
+        }
     }
 
     private static void accumulateRepulsionRange(
@@ -242,6 +327,53 @@ public final class DiReLayout {
                 }
                 double dist = Math.sqrt(distSq);
                 double distSqB = Math.pow(distSq, kernel.b);
+                double coefficient = -config.repulsionStrength()
+                        / (1.0 + kernel.a * distSqB)
+                        * Math.exp(-dist / config.cutoff())
+                        / dist;
+                forces[sourceBase] += (float) (coefficient * dx);
+                forces[sourceBase + 1] += (float) (coefficient * dy);
+                if (dimensions == 3) {
+                    forces[sourceBase + 2] += (float) (coefficient * dz);
+                }
+            }
+        }
+    }
+
+    private static void accumulateRepulsionRangeFast(
+            float[] positions,
+            float[] forces,
+            int nodeCount,
+            int dimensions,
+            int iteration,
+            KernelParameters kernel,
+            LayoutConfig config,
+            int startInclusive,
+            int endExclusive) {
+        int samples = Math.min(config.negativeSamples(), nodeCount - 1);
+        for (int i = startInclusive; i < endExclusive; i++) {
+            int sourceBase = i * dimensions;
+            for (int sample = 0; sample < samples; sample++) {
+                long key = config.randomSeed()
+                        ^ (0x9E3779B97F4A7C15L * (iteration + 1L))
+                        ^ (0xBF58476D1CE4E5B9L * (i + 1L))
+                        ^ (0x94D049BB133111EBL * (sample + 1L));
+                int j = SplitMix64.bounded(key, nodeCount - 1);
+                if (j >= i) {
+                    j++;
+                }
+                int targetBase = j * dimensions;
+                float dx = positions[targetBase] - positions[sourceBase];
+                float dy = positions[targetBase + 1] - positions[sourceBase + 1];
+                float dz = dimensions == 3 ? positions[targetBase + 2] - positions[sourceBase + 2] : 0.0f;
+                double distSq = 1.0e-10;
+                distSq += dx * dx;
+                distSq += dy * dy;
+                if (dimensions == 3) {
+                    distSq += dz * dz;
+                }
+                double dist = Math.sqrt(distSq);
+                double distSqB = distSq;
                 double coefficient = -config.repulsionStrength()
                         / (1.0 + kernel.a * distSqB)
                         * Math.exp(-dist / config.cutoff())

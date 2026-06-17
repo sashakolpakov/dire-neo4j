@@ -50,6 +50,10 @@ The release jar is for self-managed Neo4j servers that allow custom plugins.
 Managed services such as Aura do not support installing arbitrary server plugin
 jars.
 
+`fastKernel` is an opt-in performance shortcut for fitted kernels whose
+exponent is close to `1.0`. It defaults to `false`; enabling it may slightly
+perturb coordinates.
+
 ## Breaking Changes To Call Out
 
 * The unmanaged viewer no longer runs custom Cypher from `POST /api/query`.

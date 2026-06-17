@@ -1,6 +1,8 @@
 package org.dire.neo4j.core;
 
 final class KernelParameters {
+    private static final float FAST_PATH_B_EPSILON = 0.005f;
+
     final float a;
     final float b;
 
@@ -46,6 +48,10 @@ final class KernelParameters {
         }
 
         return new KernelParameters((float) Math.exp(logA), (float) Math.exp(logB));
+    }
+
+    boolean isNearLinearExponent() {
+        return Math.abs(b - 1.0f) <= FAST_PATH_B_EPSILON;
     }
 
     private static double objective(double logA, double logB, float minDist, float spread) {

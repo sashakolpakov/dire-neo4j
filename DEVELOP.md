@@ -191,6 +191,9 @@ Completed implementation slices:
 - **P2.1 done:** attraction and repulsion kernels reuse per-pair delta locals
   instead of recomputing deltas for force updates. The default deterministic
   path remains covered by existing serial/parallel tests.
+- **P2.2 done:** `fastKernel` is an opt-in near-linear kernel shortcut. The
+  default path still uses the scalar `Math.pow` kernel; when explicitly enabled
+  and fitted `b` is close to `1.0`, attraction/repulsion reuse `distSq` directly.
 
 Current verification:
 
@@ -204,13 +207,11 @@ java -jar benchmarks/target/benchmarks.jar CoreLayoutBenchmark -wi 1 -i 1 -f 1 \
 Next implementation decision:
 
 ```text
-P2.2/P2.5 -> P3.1 -> P2.4 -> P2.3
+P2.5 -> P3.1 -> P2.4 -> P2.3
 ```
 
 Rationale:
 
-- **P2.2** should add an opt-in fast kernel path for `b ~= 1` so the scalar
-  deterministic default remains unchanged.
 - **P2.5** should only proceed if benchmark/profiler data shows `recenter` is
   material; deterministic reduction order is mandatory.
 - **P3.1** becomes more important after kernel cleanup because every layout run
@@ -301,9 +302,10 @@ regenerated golden vectors.
 - **P2.1 Done - fuse the double delta pass.** `accumulate*Range` now computes
   per-pair delta locals once, reuses them for distance and force updates, and
   keeps the default deterministic path covered by serial/parallel tests.
-- **P2.2 Special-case `b ~= 1`.** When `KernelParameters.b` is near 1,
-  `Math.pow(distSq, b)` collapses to `distSq`. Branch once outside the loop.
-  Effort S-M. Perturbs determinism - ship opt-in (`fastKernel`).
+- **P2.2 Done - special-case `b ~= 1`.** `fastKernel` defaults to false. When
+  explicitly enabled and the fitted exponent is close to `1.0`, attraction and
+  repulsion use `distSq` directly instead of `Math.pow(distSq, b)`, with branch
+  selection outside hot loops.
 - **P2.3 Vectorize the repulsion kernel** (`jdk.incubator.vector`) over its
   uniform O(n * negativeSamples) structure. Effort L, high risk: incubator API
   + reordered float reductions break bit-exactness. Ship as opt-in
@@ -353,9 +355,9 @@ regenerated golden vectors.
 ### Suggested Sequencing
 
 ```text
-Done: P0.1 -> P0.2/P0.3 -> P4.1a -> P1.1a/P1.4a/P1.2a/P1.5a -> P2.1
+Done: P0.1 -> P0.2/P0.3 -> P4.1a -> P1.1a/P1.4a/P1.2a/P1.5a -> P2.1/P2.2
 
-Next: P2.2/P2.5 -> P3.1 -> P2.4 -> P2.3 (vector, last)
+Next: P2.5 -> P3.1 -> P2.4 -> P2.3 (vector, last)
 Later: P4.1b/P4.2, P3.3, P3.2 (GDS)
 ```
 
@@ -366,24 +368,17 @@ changes; P3.3 for `javax`->`jakarta` on newer Neo4j lines.
 
 ### Next Task Details
 
-1. **P2.2 - Opt-in fast kernel for `b ~= 1`.**
-   Add a config flag such as `fastKernel`, defaulting to false so the existing
-   deterministic path remains the default. Branch outside attraction/repulsion
-   loops when `Math.abs(kernel.b - 1.0)` is below a small epsilon and use
-   `distSq` instead of `Math.pow(distSq, kernel.b)`. Tests must prove
-   `fastKernel: false` preserves current output.
-
-2. **P2.5 - Profile `recenter` before changing it.**
+1. **P2.5 - Profile `recenter` before changing it.**
    Use the JMH harness or a profiler to determine whether serial recentering is
    material at target graph sizes. Only implement deterministic parallel
    recentering if the profile shows it matters; reduction order must be fixed.
 
-3. **P3.1 - Shared executor / thread-pool ownership.**
+2. **P3.1 - Shared executor / thread-pool ownership.**
    Stop creating a fresh fixed thread pool per `DiReLayout.run()` while keeping
    a no-arg compatibility path. Preserve source-range partitioning and current
    deterministic reduction behavior.
 
-4. **P2.4/P2.3 - Later kernel work.**
+3. **P2.4/P2.3 - Later kernel work.**
    Add spectral convergence gating before vector experiments. Keep vector mode
    opt-in and last because it is most likely to perturb floating-point order and
    depends on benchmark evidence.

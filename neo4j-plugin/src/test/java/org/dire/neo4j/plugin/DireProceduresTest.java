@@ -329,6 +329,20 @@ class DireProceduresTest {
     }
 
     @Test
+    void fastKernelConfigDefaultsFalseAndParsesTrue() {
+        DireConfig defaults = DireConfig.parse(Map.of(
+                "nodeQuery", "MATCH (n) RETURN id(n) AS id",
+                "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target"));
+        DireConfig enabled = DireConfig.parse(Map.of(
+                "nodeQuery", "MATCH (n) RETURN id(n) AS id",
+                "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target",
+                "fastKernel", true));
+
+        assertFalse(defaults.layoutConfig.fastKernel());
+        assertTrue(enabled.layoutConfig.fastKernel());
+    }
+
+    @Test
     void invalidConfigFailsClearly() {
         try (Neo4j neo4j = database()) {
             GraphDatabaseService db = neo4j.defaultDatabaseService();
