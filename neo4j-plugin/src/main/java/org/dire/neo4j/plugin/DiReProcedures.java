@@ -18,14 +18,14 @@ import java.util.Map;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-public class DireProcedures {
+public class DiReProcedures {
     @Context
     public Transaction tx;
 
     @Procedure(name = "dire.layout.stream", mode = Mode.READ)
     @Description("Run a DiRe graph layout and stream node coordinates without writing them.")
     public Stream<StreamResult> stream(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig config = DireConfig.parse(rawConfig);
+        DiReConfig config = DiReConfig.parse(rawConfig);
         GraphProjection projection = GraphProjectionLoader.load(tx, config, needsWarmStart(config));
         LayoutResult layout = new DiReLayout().run(projection.graph, config.layoutConfig, projection.warmStart);
         return IntStream.range(0, layout.nodeCount())
@@ -35,7 +35,7 @@ public class DireProcedures {
     @Procedure(name = "dire.layout.write", mode = Mode.WRITE)
     @Description("Run a DiRe graph layout and write coordinates back to Neo4j node properties.")
     public Stream<WriteResult> write(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig config = DireConfig.parse(rawConfig);
+        DiReConfig config = DiReConfig.parse(rawConfig);
         GraphProjection projection = GraphProjectionLoader.load(tx, config, needsWarmStart(config));
         LayoutResult layout = new DiReLayout().run(projection.graph, config.layoutConfig, projection.warmStart);
 
@@ -69,7 +69,7 @@ public class DireProcedures {
     @Procedure(name = "dire.layout.stats", mode = Mode.READ)
     @Description("Run a DiRe graph layout and return runtime and quality statistics without writing.")
     public Stream<StatsResult> stats(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig config = DireConfig.parse(rawConfig);
+        DiReConfig config = DiReConfig.parse(rawConfig);
         GraphProjection projection = GraphProjectionLoader.load(tx, config, needsWarmStart(config));
         LayoutResult layout = new DiReLayout().run(projection.graph, config.layoutConfig, projection.warmStart);
 
@@ -88,7 +88,7 @@ public class DireProcedures {
     @Procedure(name = "dire.layout.estimate", mode = Mode.READ)
     @Description("Estimate heap memory for a DiRe graph layout projection and layout run.")
     public Stream<EstimateResult> estimate(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig.EstimateInput input = DireConfig.parseEstimate(rawConfig);
+        DiReConfig.EstimateInput input = DiReConfig.parseEstimate(rawConfig);
         long nodeCount = input.nodeCount() != null
                 ? input.nodeCount()
                 : countRequiredQuery(input.nodeQuery(), input.parameters(), "nodeQuery");
@@ -119,7 +119,7 @@ public class DireProcedures {
         return GraphProjectionLoader.countRows(tx, query, parameters);
     }
 
-    private static boolean needsWarmStart(DireConfig config) {
+    private static boolean needsWarmStart(DiReConfig config) {
         return config.layoutConfig.initializationMode() == InitializationMode.WARM_START;
     }
 

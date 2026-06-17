@@ -16,7 +16,7 @@ final class GraphProjectionLoader {
     private GraphProjectionLoader() {
     }
 
-    static GraphProjection load(Transaction tx, DireConfig config, boolean includeWarmStart) {
+    static GraphProjection load(Transaction tx, DiReConfig config, boolean includeWarmStart) {
         enforceProjectionMemoryLimit(tx, config, includeWarmStart);
 
         NodeIdentities nodeIdentities = loadNodeIdentities(tx, config);
@@ -45,7 +45,7 @@ final class GraphProjectionLoader {
         return new GraphProjection(graph, sources.size(), warmStart, nodeIdentities.elementIds);
     }
 
-    private static NodeIdentities loadNodeIdentities(Transaction tx, DireConfig config) {
+    private static NodeIdentities loadNodeIdentities(Transaction tx, DiReConfig config) {
         PrimitiveLongList numericIds = new PrimitiveLongList();
         List<String> elementIds = new ArrayList<>();
         Map<String, Long> surrogateByElementId = new HashMap<>();
@@ -93,7 +93,7 @@ final class GraphProjectionLoader {
         return rows;
     }
 
-    private static void enforceProjectionMemoryLimit(Transaction tx, DireConfig config, boolean includeWarmStart) {
+    private static void enforceProjectionMemoryLimit(Transaction tx, DiReConfig config, boolean includeWarmStart) {
         if (config.maxProjectionBytes == null) {
             return;
         }
@@ -117,7 +117,7 @@ final class GraphProjectionLoader {
         }
     }
 
-    private static float[] loadWarmStart(Transaction tx, NodeIdentities nodeIdentities, DireConfig config) {
+    private static float[] loadWarmStart(Transaction tx, NodeIdentities nodeIdentities, DiReConfig config) {
         int dimensions = config.layoutConfig.dimensions();
         long[] nodeIds = nodeIdentities.nodeIds;
         float[] coordinates = new float[nodeIds.length * dimensions];

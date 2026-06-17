@@ -30,7 +30,7 @@ import java.util.Map;
 import java.util.Set;
 
 @Path("/")
-public class DireViewResource {
+public class DiReViewResource {
     private static final String DEFAULT_NODE_QUERY = """
             WITH 20000 AS sampleSize,
                  ['dire_initial', 'dire_fast', 'dire', 'dire_balanced', 'dire_wide', 'spectral'] AS coordinateRuns
@@ -128,7 +128,7 @@ public class DireViewResource {
     }
 
     private Response textResource(String name, String mediaType) {
-        try (InputStream stream = DireViewResource.class.getClassLoader().getResourceAsStream(name)) {
+        try (InputStream stream = DiReViewResource.class.getClassLoader().getResourceAsStream(name)) {
             if (stream == null) {
                 throw new WebApplicationException("Missing plugin resource " + name, Response.Status.NOT_FOUND);
             }

@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-final class DireConfig {
+final class DiReConfig {
     final String nodeQuery;
     final String relationshipQuery;
     final Map<String, Object> parameters;
@@ -20,7 +20,7 @@ final class DireConfig {
     final Long maxProjectionBytes;
     final boolean includeEmbedding;
 
-    private DireConfig(
+    private DiReConfig(
             String nodeQuery,
             String relationshipQuery,
             Map<String, Object> parameters,
@@ -41,7 +41,7 @@ final class DireConfig {
         this.includeEmbedding = includeEmbedding;
     }
 
-    static DireConfig parse(Map<String, Object> config) {
+    static DiReConfig parse(Map<String, Object> config) {
         if (config == null) {
             throw new IllegalArgumentException("config is required");
         }
@@ -82,7 +82,7 @@ final class DireConfig {
                 .fastKernel(bool(config, "fastKernel", false))
                 .build();
 
-        return new DireConfig(
+        return new DiReConfig(
                 nodeQuery,
                 relationshipQuery,
                 parameters(config),

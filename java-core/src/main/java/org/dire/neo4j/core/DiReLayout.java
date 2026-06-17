@@ -49,7 +49,7 @@ public final class DiReLayout {
                 for (int i = 0; i < forces.length; i++) {
                     positions[i] += alpha * forces[i];
                 }
-                recenter(positions, n, dimensions);
+                Recenter.apply(positions, n, dimensions);
             }
         } finally {
             if (executor != null) {
@@ -425,19 +425,6 @@ public final class DiReLayout {
                 forces[i] = cutoff;
             } else if (forces[i] < -cutoff) {
                 forces[i] = -cutoff;
-            }
-        }
-    }
-
-    private static void recenter(float[] positions, int nodeCount, int dimensions) {
-        for (int dim = 0; dim < dimensions; dim++) {
-            double mean = 0.0;
-            for (int i = 0; i < nodeCount; i++) {
-                mean += positions[i * dimensions + dim];
-            }
-            mean /= nodeCount;
-            for (int i = 0; i < nodeCount; i++) {
-                positions[i * dimensions + dim] -= (float) mean;
             }
         }
     }

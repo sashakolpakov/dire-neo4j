@@ -19,7 +19,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class DireProceduresTest {
+class DiReProceduresTest {
     @Test
     void streamReturnsCoordinates() {
         try (Neo4j neo4j = database()) {
@@ -330,10 +330,10 @@ class DireProceduresTest {
 
     @Test
     void fastKernelConfigDefaultsFalseAndParsesTrue() {
-        DireConfig defaults = DireConfig.parse(Map.of(
+        DiReConfig defaults = DiReConfig.parse(Map.of(
                 "nodeQuery", "MATCH (n) RETURN id(n) AS id",
                 "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target"));
-        DireConfig enabled = DireConfig.parse(Map.of(
+        DiReConfig enabled = DiReConfig.parse(Map.of(
                 "nodeQuery", "MATCH (n) RETURN id(n) AS id",
                 "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target",
                 "fastKernel", true));
@@ -442,7 +442,7 @@ class DireProceduresTest {
             GraphDatabaseService db = neo4j.defaultDatabaseService();
             seedViewerGraph(db);
 
-            DireViewResource resource = new DireViewResource();
+            DiReViewResource resource = new DiReViewResource();
             resource.db = db;
             Response response = resource.defaultData();
             String body = (String) response.getEntity();
@@ -461,7 +461,7 @@ class DireProceduresTest {
             GraphDatabaseService db = neo4j.defaultDatabaseService();
             seedViewerGraph(db);
 
-            DireViewResource resource = new DireViewResource();
+            DiReViewResource resource = new DiReViewResource();
             resource.db = db;
             Response response = resource.query(
                     "CREATE (:Pwned) RETURN 1 AS idx",
@@ -476,7 +476,7 @@ class DireProceduresTest {
 
     @Test
     void unmanagedViewerServesScriptPayload() {
-        DireViewResource resource = new DireViewResource();
+        DiReViewResource resource = new DiReViewResource();
         Response response = resource.script();
         String body = (String) response.getEntity();
 
@@ -488,7 +488,7 @@ class DireProceduresTest {
         return Neo4jBuilders.newInProcessBuilder()
                 .withDisabledServer()
                 .withConfig(BoltConnector.enabled, false)
-                .withProcedure(DireProcedures.class)
+                .withProcedure(DiReProcedures.class)
                 .build();
     }
 
