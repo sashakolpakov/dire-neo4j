@@ -1,8 +1,8 @@
 # Benchmarks
 
 This module contains JMH benchmarks for the pure Java `dire-neo4j-core`
-layout engine. It intentionally does not depend on Neo4j; database projection
-and write-throughput benchmarks should live in a later benchmark slice.
+layout engine. Neo4j projection, write-throughput, stream, and peak-heap
+benchmarks live in the sibling `neo4j-benchmarks/` module.
 
 ## Build
 

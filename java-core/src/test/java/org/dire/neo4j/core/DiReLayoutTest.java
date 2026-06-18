@@ -1,6 +1,7 @@
 package org.dire.neo4j.core;
 
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Tag;
 
 import java.util.concurrent.AbstractExecutorService;
 import java.util.concurrent.CompletableFuture;
@@ -37,6 +38,50 @@ class DiReLayoutTest {
         assertFinite(first);
         assertSpread(first);
         assertTrue(maxDelta(first.initialPositionsCopy(), first.positionsCopy()) > 1.0e-3f);
+    }
+
+    @Test
+    void fixedConfigurationMatchesGoldenVectorsExactly() {
+        LayoutConfig config = LayoutConfig.builder()
+                .iterations(20)
+                .randomSeed(7L)
+                .negativeSamples(4)
+                .concurrency(1)
+                .build();
+
+        LayoutResult result = new DiReLayout().run(cycle(8), config);
+
+        assertArrayEquals(new float[]{
+                1.2125305f, 0.99999994f, -1.3212014f, -0.99999994f,
+                0.71045333f, 0.99999994f, 0.5286328f, -0.99999994f,
+                -1.2125305f, 1.0000001f, 1.3212014f, -1.0000001f,
+                -0.7104532f, 1.0000001f, -0.52863306f, -1.0000001f
+        }, result.initialPositionsCopy());
+        assertArrayEquals(new float[]{
+                -1.3466598f, -0.048272926f, -1.0094532f, 0.88623273f,
+                0.1113702f, 1.4807844f, 1.088632f, 1.0818856f,
+                1.3543473f, -0.078181125f, 0.99277705f, -1.009264f,
+                -0.12600213f, -1.42947f, -1.0650115f, -0.8837148f
+        }, result.positionsCopy());
+    }
+
+    @Test
+    @Tag("large")
+    void largeGraphLayoutSmokeTest() {
+        CsrGraph graph = cycle(100_000);
+        LayoutConfig config = LayoutConfig.builder()
+                .initializationMode(InitializationMode.RANDOM)
+                .iterations(2)
+                .randomSeed(123L)
+                .negativeSamples(2)
+                .concurrency(4)
+                .build();
+
+        LayoutResult result = new DiReLayout().run(graph, config);
+
+        assertEquals(100_000, result.nodeCount());
+        assertFinite(result);
+        assertSpread(result);
     }
 
     @Test

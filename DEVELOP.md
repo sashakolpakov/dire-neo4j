@@ -209,6 +209,16 @@ Completed implementation slices:
   instead of creating and shutting down a fixed thread pool per run. Callers
   can inject an externally owned `ExecutorService`; `DiReLayout` never shuts it
   down. The no-arg constructor remains compatible.
+- **P1.3 done:** `dire.layout.write` accepts optional `writeBatchSize`.
+  Unset preserves caller-transaction atomicity; set commits independent write
+  batches and explicitly permits partial completion.
+- **P4.1b done:** `neo4j-benchmarks/` adds JMH coverage for projection, sampled
+  peak heap, write throughput, numeric/element IDs, and stream embeddings.
+  Documented commands cover 70k and manual one-million-node runs; CI has a
+  small finite-score/regression-threshold smoke gate.
+- **P4.2 done:** exact golden vectors pin deterministic core output, a
+  `large-tests` profile runs a 100k-node layout smoke test, and viewer tests
+  assert the built-in payload leaves node/relationship counts unchanged.
 
 Current verification:
 
@@ -223,7 +233,7 @@ Next implementation decision:
 
 ```text
 S1 complete: P2.5 -> P3.1
-S2: P1.3 -> P4.1b -> P4.2
+S2 complete: P1.3 -> P4.1b -> P4.2
 S3: P3.3 -> P2.4
 S4: P2.3 -> P3.2
 ```
@@ -309,10 +319,10 @@ regenerated golden vectors.
 - **P1.2 Done - stream results lazily.** `DiReProcedures.stream` now returns a
   lazy stream and gates redundant `embedding`/`initialEmbedding` list allocation
   behind `includeEmbedding: true`.
-- **P1.3 Batch the write transaction.** `dire.layout.write` writes every node in
-  the caller's single transaction. Add a configurable `writeBatchSize` and
-  commit in chunks. Effort M. Batched commits change atomicity (opt-in /
-  documented).
+- **P1.3 done - batch the write transaction.** `dire.layout.write` defaults to
+  the caller's single transaction. A positive `writeBatchSize` commits
+  independent chunks after projection/layout. Earlier batches survive later
+  failures; uncommitted caller changes are not visible to batch transactions.
 - **P1.4 Done - reduce loader copies.** `GraphProjectionLoader` now hands
   `PrimitiveLongList`/`PrimitiveFloatList` backing arrays + sizes directly to a
   length-aware CSR builder entry point instead of `toArray()`. Combined with
@@ -395,14 +405,16 @@ regenerated golden vectors.
   module for deterministic synthetic `java-core` benchmarks covering CSR build,
   spectral initialization through public layout APIs, random-init layout, and
   full spectral layout.
-- **P4.1b Remaining - projection/write/peak-heap benchmarks.** Add a
-  JMH module over synthetic graphs (70k and ~1M nodes) measuring projection
-  time + peak heap, per-iteration kernel time, spectral-init time, and write
-  throughput, with a no-regression check in CI. Effort M-L. **Sequence before
-  P2.3/P2.4** so kernel changes are measured, not guessed.
-- **P4.2 Large-graph + determinism regression tests.** Add a ~100k-node memory/
-  throughput smoke test, a golden-vector determinism test pinning exact
-  positions for a fixed seed/config, and a viewer read-only test. Effort M.
+- **P4.1b done - projection/write/peak-heap benchmarks.**
+  `neo4j-benchmarks/` measures projection, sampled peak-heap delta, write
+  throughput, and stream materialization over deterministic ring fixtures.
+  Parameters cover numeric/element IDs, embeddings, and batched writes.
+  Documented 70k and ~1M commands remain opt-in; CI runs bounded threshold
+  checks at 1k nodes.
+- **P4.2 done - large-graph + determinism regression tests.** A `large-tests`
+  Maven profile enables the 100k-node layout smoke test. Default tests pin exact
+  initial/final golden vectors and verify viewer reads do not change graph
+  counts.
 
 ### Suggested Sequencing
 
@@ -411,7 +423,7 @@ Done: P0.1 -> P0.2/P0.3 -> P4.1a -> P1.1a/P1.4a/P1.2a/P1.5a -> P2.1/P2.2 -> N1
 Done: P2.5 (profiled; recenter remains serial) -> P3.1 (shared/injected executor)
 
 S1 Immediate: complete
-S2 Scale validation: P1.3 -> P4.1b -> P4.2
+S2 Scale validation: complete
 S3 Packaging + safe algorithm controls: P3.3 -> P2.4
 S4 Optional/high-risk: P2.3 -> P3.2 (GDS)
 ```
@@ -423,40 +435,22 @@ Neo4j lines. P3.1 preserved the no-arg `DiReLayout` construction path.
 
 ### Next Task Details
 
-1. **S2.1 / P1.3 - Batched write mode.**
-   Add an opt-in `writeBatchSize` for `dire.layout.write`; default preserves the
-   current single caller transaction. Document the atomicity tradeoff, test
-   batch boundaries and failures, and keep `writeInitialProperties` behavior
-   consistent with final coordinate writes.
-
-2. **S2.2 / P4.1b - Projection/write/peak-heap benchmarks.**
-   Extend `benchmarks/` with projection, write-throughput, and peak-heap
-   scenarios for 70k and larger synthetic graphs. Include runs that compare
-   numeric id mode, elementId mode, streaming with/without embeddings, and
-   batched write mode. These measurements decide whether P1/P2 changes met the
-   scale goal.
-
-3. **S2.3 / P4.2 - Regression gates.**
-   Add a large-graph smoke test, golden-vector determinism fixture, and viewer
-   read-only regression. Keep the large graph test opt-in or profile-gated if it
-   is too slow for default `mvn test`.
-
-4. **S3.1 / P3.3 - Neo4j version matrix and `javax`/`jakarta` cleanup.**
+1. **S3.1 / P3.3 - Neo4j version matrix and `javax`/`jakarta` cleanup.**
    Parameterize supported Neo4j versions via Maven profiles and CI matrix.
    Resolve the `jakarta.ws.rs-api` dependency versus `javax.ws.rs.*` imports so
    the unmanaged extension builds intentionally for each supported Neo4j line.
 
-5. **S3.2 / P2.4 - Convergence-checked spectral iterations.**
+2. **S3.2 / P2.4 - Convergence-checked spectral iterations.**
    Add `spectralTolerance` and related floor/cap controls with defaults that
    preserve the current fixed 160-iteration behavior. Gate changed output behind
    explicit config and compare quality/runtime with the P4.1b benchmark suite.
 
-6. **S4.1 / P2.3 - Optional vector repulsion kernel.**
+3. **S4.1 / P2.3 - Optional vector repulsion kernel.**
    Only start after P4.1b/P4.2 baselines exist. Ship as opt-in
    `kernelMode: 'vector'`, keep scalar deterministic default, and expect golden
    vector differences because reduction/order changes are likely.
 
-7. **S4.2 / P3.2 - Optional GDS graph-catalog loader.**
+4. **S4.2 / P3.2 - Optional GDS graph-catalog loader.**
    Defer until the plugin packaging matrix is stable. Implement as a separate
    optional artifact or profile because GDS introduces a heavy provided
    dependency and version matrix.

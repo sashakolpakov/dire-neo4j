@@ -15,6 +15,7 @@ Common config:
 
 * ``writeProperties``
 * ``writeInitialProperties``
+* ``writeBatchSize``
 * ``iterations``
 * ``randomSeed``
 * ``concurrency``
@@ -71,6 +72,9 @@ Configuration Reference
    * - ``writeInitialProperties``
      - ``['dire_initial_x', 'dire_initial_y']``
      - initialization coordinates
+   * - ``writeBatchSize``
+     - unset
+     - opt-in independent write transactions; earlier batches survive later failures
    * - ``warmStartProperties``
      - ``writeProperties``
      - used with ``initialization: 'warm_start'``
@@ -114,3 +118,12 @@ Projection Rules
   ``target`` values.
 * Optional ``weight`` values must be finite and non-negative.
 * Relationships whose endpoints are not present in ``nodeQuery`` cannot be used.
+
+Write Transaction Semantics
+---------------------------
+
+Without ``writeBatchSize``, coordinate properties participate in the caller's
+transaction and roll back with it. A positive ``writeBatchSize`` commits
+independent transactions after projection and layout. This bounds transaction
+size but is not atomic, and batch transactions cannot see uncommitted caller
+changes.

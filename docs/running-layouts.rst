@@ -47,7 +47,8 @@ Write Coordinates
      writeInitialProperties: ['dire_initial_x', 'dire_initial_y'],
      iterations: 200,
      randomSeed: 42,
-     concurrency: 8
+     concurrency: 8,
+     writeBatchSize: 10000
    })
    YIELD nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength
    RETURN nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength;
@@ -59,6 +60,10 @@ The output properties are normal Neo4j node properties:
    MATCH (n:Paper)
    RETURN n.name, n.dire_x, n.dire_y
    LIMIT 10;
+
+Omit ``writeBatchSize`` to keep all writes in the caller transaction. When it
+is set, each chunk commits independently; use this for large committed
+projections only, because partial results remain if a later batch fails.
 
 Wide Variant
 ------------

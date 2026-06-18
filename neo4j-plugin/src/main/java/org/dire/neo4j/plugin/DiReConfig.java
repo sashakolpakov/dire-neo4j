@@ -19,6 +19,7 @@ final class DiReConfig {
     final LayoutConfig layoutConfig;
     final Long maxProjectionBytes;
     final boolean includeEmbedding;
+    final Integer writeBatchSize;
 
     private DiReConfig(
             String nodeQuery,
@@ -29,7 +30,8 @@ final class DiReConfig {
             List<String> warmStartProperties,
             LayoutConfig layoutConfig,
             Long maxProjectionBytes,
-            boolean includeEmbedding) {
+            boolean includeEmbedding,
+            Integer writeBatchSize) {
         this.nodeQuery = nodeQuery;
         this.relationshipQuery = relationshipQuery;
         this.parameters = parameters;
@@ -39,6 +41,7 @@ final class DiReConfig {
         this.layoutConfig = layoutConfig;
         this.maxProjectionBytes = maxProjectionBytes;
         this.includeEmbedding = includeEmbedding;
+        this.writeBatchSize = writeBatchSize;
     }
 
     static DiReConfig parse(Map<String, Object> config) {
@@ -91,7 +94,8 @@ final class DiReConfig {
                 warmStartProperties,
                 layoutConfig,
                 positiveOptionalLong(config, "maxProjectionBytes"),
-                bool(config, "includeEmbedding", false));
+                bool(config, "includeEmbedding", false),
+                positiveOptionalInteger(config, "writeBatchSize"));
     }
 
     static EstimateInput parseEstimate(Map<String, Object> config) {
@@ -189,6 +193,17 @@ final class DiReConfig {
             throw new IllegalArgumentException(key + " must be positive");
         }
         return value;
+    }
+
+    private static Integer positiveOptionalInteger(Map<String, Object> config, String key) {
+        Long value = optionalLong(config, key);
+        if (value == null) {
+            return null;
+        }
+        if (value <= 0L || value > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(key + " must be between 1 and " + Integer.MAX_VALUE);
+        }
+        return value.intValue();
     }
 
     private static float floatValue(Map<String, Object> config, String key, float defaultValue) {

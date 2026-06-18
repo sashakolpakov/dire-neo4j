@@ -16,6 +16,7 @@
         <module>java-core</module>
         <module>neo4j-plugin</module>
         <module>benchmarks</module>
+        <module>neo4j-benchmarks</module>
     </modules>
 
     <properties>
@@ -24,6 +25,7 @@
         <neo4j.version>5.26.0</neo4j.version>
         <junit.version>5.10.2</junit.version>
         <jmh.version>1.37</jmh.version>
+        <excludedTestGroups>large</excludedTestGroups>
     </properties>
 
     <dependencyManagement>
@@ -54,9 +56,19 @@
                     <version>3.2.5</version>
                     <configuration>
                         <useModulePath>false</useModulePath>
+                        <excludedGroups>${excludedTestGroups}</excludedGroups>
                     </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
     </build>
+
+    <profiles>
+        <profile>
+            <id>large-tests</id>
+            <properties>
+                <excludedTestGroups>none</excludedTestGroups>
+            </properties>
+        </profile>
+    </profiles>
 </project>

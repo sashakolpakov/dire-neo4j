@@ -1,0 +1,4 @@
+{
+  "org.dire.neo4j.benchmarks.CoreLayoutBenchmark.randomInitLayout": 20.0,
+  "org.dire.neo4j.plugin.Neo4jScaleBenchmark.projection": 10.0
+}

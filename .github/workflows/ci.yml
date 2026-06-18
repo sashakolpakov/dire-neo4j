@@ -31,6 +31,28 @@ jobs:
       - name: Maven verify
         run: mvn -B -ntp verify
 
+      - name: Benchmark regression smoke
+        run: |
+          java -jar benchmarks/target/benchmarks.jar \
+            '^org.dire.neo4j.benchmarks.CoreLayoutBenchmark.randomInitLayout$' \
+            -wi 0 -i 1 -r 1s -f 1 \
+            -p nodeCount=1000 \
+            -p longRangeEdgesPerNode=1 \
+            -p iterations=3 \
+            -p concurrency=1 \
+            -rf json -rff core-benchmark.json
+          java -jar neo4j-benchmarks/target/neo4j-benchmarks.jar \
+            '^org.dire.neo4j.plugin.Neo4jScaleBenchmark.projection$' \
+            -wi 0 -i 1 -r 1s -f 1 \
+            -p nodeCount=1000 \
+            -p identityMode=numeric \
+            -p writeBatchSize=0 \
+            -p includeEmbedding=false \
+            -rf json -rff neo4j-benchmark.json
+          python3 scripts/check-jmh-regression.py \
+            benchmarks/regression-thresholds.json \
+            core-benchmark.json neo4j-benchmark.json
+
       - name: Smoke test installable plugin
         run: scripts/neo4j-smoke.sh
 

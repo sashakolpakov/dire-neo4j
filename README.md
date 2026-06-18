@@ -20,7 +20,8 @@ The intended workflow is:
 java-core/      primitive-array layout engine
 neo4j-plugin/   Neo4j procedures and /dire/ viewer
 examples/       dataset loaders and runnable examples
-benchmarks/     benchmark harness placeholder
+benchmarks/     pure Java core JMH benchmarks
+neo4j-benchmarks/ Neo4j-backed projection/write/heap JMH benchmarks
 docs/           Sphinx docs and usage notes
 ```
 
@@ -264,7 +265,8 @@ CALL dire.layout.write({
   writeInitialProperties: ['dire_initial_x', 'dire_initial_y'],
   iterations: 200,
   randomSeed: 42,
-  concurrency: 8
+  concurrency: 8,
+  writeBatchSize: 10000
 })
 YIELD nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength
 RETURN nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength;
@@ -274,6 +276,13 @@ The procedure writes:
 
 - `dire_x`, `dire_y`: final DiRe coordinates.
 - `dire_initial_x`, `dire_initial_y`: initialization coordinates.
+
+`writeBatchSize` is optional. Without it, all properties participate in the
+caller's transaction and roll back with that transaction. When set to a
+positive node count, writes commit in independent chunks after projection and
+layout complete. This reduces transaction size but is intentionally non-atomic:
+earlier batches remain committed if a later batch fails, and uncommitted caller
+changes are not visible to batch transactions.
 
 ## Add A Wider Variant
 
@@ -376,6 +385,7 @@ Common layout options:
 | `dimensions` | `2` | 2D or 3D coordinates |
 | `writeProperties` | `['dire_x', 'dire_y']` | final coordinates |
 | `writeInitialProperties` | `['dire_initial_x', 'dire_initial_y']` | initialization coordinates |
+| `writeBatchSize` | unset | opt-in independent write transactions; changes atomicity |
 | `warmStartProperties` | `writeProperties` | used with `initialization: 'warm_start'` |
 | `negativeSamples` | `16` | sampled repulsion per node |
 | `concurrency` | `min(availableProcessors, 8)` | worker threads for force kernels |
