@@ -200,11 +200,15 @@ Completed implementation slices:
   (`org.dire.neo4j.plugin`) and procedures by `@Procedure(name="dire.layout.*")`,
   so neither server config nor Cypher procedure names change. The persisted
   `:DireView` node label is data, not a code identifier, and is left unchanged.
-- **P2.5 (in progress):** `recenter` extracted into `Recenter.apply`
+- **P2.5 done:** `recenter` extracted into `Recenter.apply`
   (bit-identical, fixed reduction order) and a `RecenterBenchmark` JMH harness
-  added isolating the recenter pass from a full layout run. Isolated recenter
-  pass measured (see below); per-iteration kernel comparison and the
-  keep-serial-vs-parallelize verdict are still pending.
+  added isolating the recenter pass from a full layout run. Measurements at
+  10k/100k nodes, 2D/3D, and concurrency 1/4 put recenter at 0.4-0.8% of
+  per-iteration layout time, so it remains serial.
+- **P3.1 done:** `DiReLayout` now uses a process-wide bounded shared executor
+  instead of creating and shutting down a fixed thread pool per run. Callers
+  can inject an externally owned `ExecutorService`; `DiReLayout` never shuts it
+  down. The no-arg constructor remains compatible.
 
 Current verification:
 
@@ -218,7 +222,7 @@ java -jar benchmarks/target/benchmarks.jar CoreLayoutBenchmark -wi 1 -i 1 -f 1 \
 Next implementation decision:
 
 ```text
-S1: P2.5 -> P3.1
+S1 complete: P2.5 -> P3.1
 S2: P1.3 -> P4.1b -> P4.2
 S3: P3.3 -> P2.4
 S4: P2.3 -> P3.2
@@ -226,10 +230,10 @@ S4: P2.3 -> P3.2
 
 Rationale:
 
-- **P2.5** should only proceed if benchmark/profiler data shows `recenter` is
-  material; deterministic reduction order is mandatory.
-- **P3.1** becomes more important after kernel cleanup because every layout run
-  still creates a fresh fixed thread pool.
+- **P2.5** profiling showed `recenter` is immaterial, so the deterministic
+  serial reduction remains.
+- **P3.1** removed per-run fixed thread-pool creation in favor of shared or
+  injected executor ownership.
 - **P1.3/P4.1b/P4.2** should follow before deeper kernel changes because write
   batching and peak-heap benchmarks determine whether memory-at-scale is
   actually fixed.
@@ -336,10 +340,10 @@ regenerated golden vectors.
   fixed 160 power iterations; add a Rayleigh/subspace-angle convergence check
   with a floor and the 160 cap. Effort M. Changes results - gate behind
   `spectralTolerance` (default = current fixed behavior).
-- **P2.5 Parallelize `recenter`** (currently serial every iteration, O(n*d)).
-  Only if profiling justifies; a parallel double mean must use a deterministic
-  reduction order. Effort S-M. Likely leave serial. *In progress:* `recenter`
-  extracted to `Recenter.apply` and a `RecenterBenchmark` JMH harness added.
+- **P2.5 done - profile `recenter`** (serial every iteration, O(n*d)).
+  `recenter` was extracted to `Recenter.apply` and measured with a dedicated
+  JMH harness. A parallel double mean would require deterministic reduction,
+  but profiling did not justify that complexity.
   Isolated recenter pass (AverageTime, JDK default, 1 fork):
 
   ```text
@@ -350,17 +354,29 @@ regenerated golden vectors.
   100000     3     332.0 ± 82.0
   ```
 
-  Next: run `RecenterBenchmark.fullLayout` at matching params, derive
-  per-iteration time (`fullLayout / iterations`), and compare. If recenter is
-  below per-iteration noise, close P2.5 with this evidence and keep it serial;
-  otherwise implement a deterministic fixed-partition parallel recenter.
+  Matching full-layout measurements (20 iterations) produced:
+
+  ```text
+  nodes   dims  conc  recenter us  layout us  recenter/iteration
+  10000   2     1     18.456       89738.986  0.41%
+  10000   3     1     27.601      106803.038  0.52%
+  10000   2     4     18.456       65714.724  0.56%
+  10000   3     4     27.601       80268.458  0.69%
+  100000  2     1    213.401      914346.156  0.47%
+  100000  3     1    320.378     1075925.834  0.60%
+  100000  2     4    213.401      641562.042  0.67%
+  100000  3     4    320.378      819989.813  0.78%
+  ```
+
+  Verdict: below per-iteration noise; keep the deterministic serial reduction.
 
 ### P3 - Integration / packaging / threading
 
-- **P3.1 Stop creating a thread pool per `run()`.** `DiReLayout` calls
-  `Executors.newFixedThreadPool` per invocation. Inject Neo4j's `JobScheduler`
-  or a shared bounded pool. Effort M. Keep a no-arg constructor for
-  compatibility; preserve source-range partitioning.
+- **P3.1 done - stop creating a thread pool per `run()`.** `DiReLayout` uses a
+  daemon, fixed-size process-wide executor with bounded queueing and caller-runs
+  backpressure. An `ExecutorService` constructor supports host-managed
+  execution; executors remain caller-owned. The no-arg constructor and
+  source-range partitioning are preserved.
 - **P3.2 GDS graph-catalog projection support.** Optional second loader reading a
   named GDS graph instead of re-running Cypher (ease + memory reuse). Effort L.
   Ship as a separate optional artifact - GDS is a heavy `provided` dependency
@@ -392,9 +408,9 @@ regenerated golden vectors.
 
 ```text
 Done: P0.1 -> P0.2/P0.3 -> P4.1a -> P1.1a/P1.4a/P1.2a/P1.5a -> P2.1/P2.2 -> N1
-In progress: P2.5 (Recenter extracted + JMH harness; verdict pending)
+Done: P2.5 (profiled; recenter remains serial) -> P3.1 (shared/injected executor)
 
-S1 Immediate: P2.5 (finish verdict) -> P3.1
+S1 Immediate: complete
 S2 Scale validation: P1.3 -> P4.1b -> P4.2
 S3 Packaging + safe algorithm controls: P3.3 -> P2.4
 S4 Optional/high-risk: P2.3 -> P3.2 (GDS)
@@ -402,59 +418,45 @@ S4 Optional/high-risk: P2.3 -> P3.2 (GDS)
 
 Backward-incompatible items to call out in release notes: P0.1 is already a
 security-breaking viewer change; P1.2 only if embeddings are dropped by default;
-P1.3 if batched writes change atomicity; P3.1 if `DiReLayout` construction
-changes; P3.3 for `javax`->`jakarta` on newer Neo4j lines.
+P1.3 if batched writes change atomicity; P3.3 for `javax`->`jakarta` on newer
+Neo4j lines. P3.1 preserved the no-arg `DiReLayout` construction path.
 
 ### Next Task Details
 
-1. **S1.1 / P2.5 - Profile `recenter` before changing it.**
-   Add a JMH mode or profiler notes that isolate per-iteration kernel time from
-   recenter time at representative dimensions/concurrency. If recenter is below
-   noise, mark P2.5 closed with evidence and leave it serial. If material,
-   implement deterministic parallel recenter using fixed worker partitions and a
-   stable reduction order. Verify serial/parallel equality and JMH compile.
-
-2. **S1.2 / P3.1 - Shared executor / thread-pool ownership.**
-   Stop creating a fresh fixed thread pool per `DiReLayout.run()`. Add an
-   injectable executor/runner abstraction or bounded shared pool while keeping
-   the current no-arg `DiReLayout` compatibility path. Preserve source-range
-   partitioning, deterministic force accumulation, and executor shutdown
-   ownership semantics in tests.
-
-3. **S2.1 / P1.3 - Batched write mode.**
+1. **S2.1 / P1.3 - Batched write mode.**
    Add an opt-in `writeBatchSize` for `dire.layout.write`; default preserves the
    current single caller transaction. Document the atomicity tradeoff, test
    batch boundaries and failures, and keep `writeInitialProperties` behavior
    consistent with final coordinate writes.
 
-4. **S2.2 / P4.1b - Projection/write/peak-heap benchmarks.**
+2. **S2.2 / P4.1b - Projection/write/peak-heap benchmarks.**
    Extend `benchmarks/` with projection, write-throughput, and peak-heap
    scenarios for 70k and larger synthetic graphs. Include runs that compare
    numeric id mode, elementId mode, streaming with/without embeddings, and
    batched write mode. These measurements decide whether P1/P2 changes met the
    scale goal.
 
-5. **S2.3 / P4.2 - Regression gates.**
+3. **S2.3 / P4.2 - Regression gates.**
    Add a large-graph smoke test, golden-vector determinism fixture, and viewer
    read-only regression. Keep the large graph test opt-in or profile-gated if it
    is too slow for default `mvn test`.
 
-6. **S3.1 / P3.3 - Neo4j version matrix and `javax`/`jakarta` cleanup.**
+4. **S3.1 / P3.3 - Neo4j version matrix and `javax`/`jakarta` cleanup.**
    Parameterize supported Neo4j versions via Maven profiles and CI matrix.
    Resolve the `jakarta.ws.rs-api` dependency versus `javax.ws.rs.*` imports so
    the unmanaged extension builds intentionally for each supported Neo4j line.
 
-7. **S3.2 / P2.4 - Convergence-checked spectral iterations.**
+5. **S3.2 / P2.4 - Convergence-checked spectral iterations.**
    Add `spectralTolerance` and related floor/cap controls with defaults that
    preserve the current fixed 160-iteration behavior. Gate changed output behind
    explicit config and compare quality/runtime with the P4.1b benchmark suite.
 
-8. **S4.1 / P2.3 - Optional vector repulsion kernel.**
+6. **S4.1 / P2.3 - Optional vector repulsion kernel.**
    Only start after P4.1b/P4.2 baselines exist. Ship as opt-in
    `kernelMode: 'vector'`, keep scalar deterministic default, and expect golden
    vector differences because reduction/order changes are likely.
 
-9. **S4.2 / P3.2 - Optional GDS graph-catalog loader.**
+7. **S4.2 / P3.2 - Optional GDS graph-catalog loader.**
    Defer until the plugin packaging matrix is stable. Implement as a separate
    optional artifact or profile because GDS introduces a heavy provided
    dependency and version matrix.

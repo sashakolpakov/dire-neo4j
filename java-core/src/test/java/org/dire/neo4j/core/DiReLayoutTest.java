@@ -2,9 +2,20 @@ package org.dire.neo4j.core;
 
 import org.junit.jupiter.api.Test;
 
+import java.util.concurrent.AbstractExecutorService;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertSame;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DiReLayoutTest {
@@ -49,6 +60,92 @@ class DiReLayoutTest {
 
         assertArrayEquals(single.positionsCopy(), parallel.positionsCopy(), 1.0e-6f);
         assertArrayEquals(single.initialPositionsCopy(), parallel.initialPositionsCopy(), 1.0e-6f);
+    }
+
+    @Test
+    void injectedExecutorIsReusedAndRemainsCallerOwned() {
+        CsrGraph graph = cycle(128);
+        LayoutConfig config = LayoutConfig.builder()
+                .iterations(3)
+                .randomSeed(19L)
+                .negativeSamples(2)
+                .concurrency(4)
+                .build();
+        TrackingExecutor executor = new TrackingExecutor(2);
+
+        try {
+            DiReLayout layout = new DiReLayout(executor);
+            LayoutResult first = layout.run(graph, config);
+            int submissionsAfterFirstRun = executor.submissions();
+            LayoutResult second = layout.run(graph, config);
+
+            assertTrue(submissionsAfterFirstRun > 0);
+            assertTrue(executor.submissions() > submissionsAfterFirstRun);
+            assertFalse(executor.isShutdown());
+            assertArrayEquals(first.positionsCopy(), second.positionsCopy(), 1.0e-6f);
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    void serialLayoutDoesNotSubmitWorkToInjectedExecutor() {
+        CsrGraph graph = cycle(128);
+        LayoutConfig config = LayoutConfig.builder()
+                .iterations(3)
+                .concurrency(1)
+                .build();
+        TrackingExecutor executor = new TrackingExecutor(1);
+
+        try {
+            new DiReLayout(executor).run(graph, config);
+
+            assertEquals(0, executor.submissions());
+            assertFalse(executor.isShutdown());
+        } finally {
+            executor.shutdown();
+        }
+    }
+
+    @Test
+    void workerFailureIsReportedWithoutTakingExecutorOwnership() {
+        RuntimeException failure = new IllegalArgumentException("boom");
+        FailingExecutor executor = new FailingExecutor(failure);
+        LayoutConfig config = LayoutConfig.builder()
+                .iterations(1)
+                .concurrency(4)
+                .build();
+
+        IllegalStateException error =
+                assertThrows(IllegalStateException.class, () -> new DiReLayout(executor).run(cycle(128), config));
+
+        assertEquals("layout worker failed", error.getMessage());
+        assertSame(failure, error.getCause());
+        assertFalse(executor.isShutdown());
+    }
+
+    @Test
+    void workerInterruptionRestoresInterruptFlagWithoutShuttingDownExecutor() {
+        BlockingExecutor executor = new BlockingExecutor();
+        LayoutConfig config = LayoutConfig.builder()
+                .iterations(1)
+                .concurrency(4)
+                .build();
+
+        try {
+            Thread.currentThread().interrupt();
+
+            IllegalStateException error =
+                    assertThrows(IllegalStateException.class, () -> new DiReLayout(executor).run(cycle(128), config));
+
+            assertEquals("layout worker interrupted", error.getMessage());
+            assertTrue(Thread.currentThread().isInterrupted());
+            assertFalse(executor.isShutdown());
+        } finally {
+            Thread.interrupted();
+            executor.release();
+            executor.shutdownNow();
+        }
     }
 
     @Test
@@ -226,5 +323,142 @@ class DiReLayoutTest {
             max = Math.max(max, Math.abs(left[i] - right[i]));
         }
         return max;
+    }
+
+    private static final class TrackingExecutor extends AbstractExecutorService {
+        private final ExecutorService delegate;
+        private final AtomicInteger submissions = new AtomicInteger();
+
+        private TrackingExecutor(int threads) {
+            delegate = Executors.newFixedThreadPool(threads);
+        }
+
+        int submissions() {
+            return submissions.get();
+        }
+
+        @Override
+        public void shutdown() {
+            delegate.shutdown();
+        }
+
+        @Override
+        public java.util.List<Runnable> shutdownNow() {
+            return delegate.shutdownNow();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return delegate.isShutdown();
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return delegate.isTerminated();
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+            return delegate.awaitTermination(timeout, unit);
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            submissions.incrementAndGet();
+            delegate.execute(command);
+        }
+    }
+
+    private static final class FailingExecutor extends AbstractExecutorService {
+        private final RuntimeException failure;
+        private boolean shutdown;
+
+        private FailingExecutor(RuntimeException failure) {
+            this.failure = failure;
+        }
+
+        @Override
+        public Future<?> submit(Runnable task) {
+            return CompletableFuture.failedFuture(failure);
+        }
+
+        @Override
+        public void shutdown() {
+            shutdown = true;
+        }
+
+        @Override
+        public java.util.List<Runnable> shutdownNow() {
+            shutdown = true;
+            return java.util.List.of();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return shutdown;
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return shutdown;
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) {
+            return shutdown;
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            throw new UnsupportedOperationException();
+        }
+    }
+
+    private static final class BlockingExecutor extends AbstractExecutorService {
+        private final ExecutorService delegate = Executors.newSingleThreadExecutor();
+        private final CountDownLatch release = new CountDownLatch(1);
+
+        void release() {
+            release.countDown();
+        }
+
+        @Override
+        public void shutdown() {
+            release();
+            delegate.shutdown();
+        }
+
+        @Override
+        public java.util.List<Runnable> shutdownNow() {
+            release();
+            return delegate.shutdownNow();
+        }
+
+        @Override
+        public boolean isShutdown() {
+            return delegate.isShutdown();
+        }
+
+        @Override
+        public boolean isTerminated() {
+            return delegate.isTerminated();
+        }
+
+        @Override
+        public boolean awaitTermination(long timeout, TimeUnit unit) throws InterruptedException {
+            return delegate.awaitTermination(timeout, unit);
+        }
+
+        @Override
+        public void execute(Runnable command) {
+            delegate.execute(() -> {
+                try {
+                    release.await();
+                    command.run();
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        }
     }
 }
