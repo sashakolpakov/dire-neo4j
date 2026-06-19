@@ -90,7 +90,7 @@ Configuration Reference
      - include boxed ``embedding`` and ``initialEmbedding`` lists in stream results
    * - ``fastKernel``
      - ``false``
-     - opt-in shortcut for near-linear kernels; may slightly perturb coordinates
+     - opt-in dyadic exponent approximation for the force law; may slightly perturb coordinates
    * - ``spectralTolerance``
      - ``0.0``
      - opt-in normalized subspace convergence threshold; zero keeps fixed iterations

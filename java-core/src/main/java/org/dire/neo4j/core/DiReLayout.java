@@ -52,17 +52,17 @@ public final class DiReLayout {
         float[] initialPositions = Arrays.copyOf(positions, positions.length);
         float[] forces = new float[n * dimensions];
         KernelParameters kernel = KernelParameters.fit(config.minDist(), config.spread());
-        boolean fastKernel = config.fastKernel() && kernel.isNearLinearExponent();
+        FastPower fastPower = config.fastKernel() ? FastPower.forExponent(kernel.b) : null;
         int workers = workerCount(config, n);
 
         for (int iteration = 0; iteration < config.iterations(); iteration++) {
             Arrays.fill(forces, 0.0f);
             if (workers == 1) {
-                accumulateAttraction(graph, positions, forces, dimensions, kernel, config, fastKernel);
-                accumulateRepulsion(positions, forces, n, dimensions, iteration, kernel, config, fastKernel);
+                accumulateAttraction(graph, positions, forces, dimensions, kernel, config, fastPower);
+                accumulateRepulsion(positions, forces, n, dimensions, iteration, kernel, config, fastPower);
             } else {
-                accumulateAttractionParallel(executor, workers, graph, positions, forces, dimensions, kernel, config, fastKernel);
-                accumulateRepulsionParallel(executor, workers, positions, forces, n, dimensions, iteration, kernel, config, fastKernel);
+                accumulateAttractionParallel(executor, workers, graph, positions, forces, dimensions, kernel, config, fastPower);
+                accumulateRepulsionParallel(executor, workers, positions, forces, n, dimensions, iteration, kernel, config, fastPower);
             }
             clampForces(forces, config.cutoff());
             float alpha = config.learningRate() * (1.0f - (iteration / (float) Math.max(1, config.iterations())));
@@ -121,9 +121,9 @@ public final class DiReLayout {
             int dimensions,
             KernelParameters kernel,
             LayoutConfig config,
-            boolean fastKernel) {
-        if (fastKernel) {
-            accumulateAttractionRangeFast(graph, positions, forces, dimensions, kernel, config, 0, graph.nodeCount());
+            FastPower fastPower) {
+        if (fastPower != null) {
+            accumulateAttractionRangeFast(graph, positions, forces, dimensions, kernel, config, fastPower, 0, graph.nodeCount());
         } else {
             accumulateAttractionRange(graph, positions, forces, dimensions, kernel, config, 0, graph.nodeCount());
         }
@@ -138,8 +138,8 @@ public final class DiReLayout {
             int dimensions,
             KernelParameters kernel,
             LayoutConfig config,
-            boolean fastKernel) {
-        if (fastKernel) {
+            FastPower fastPower) {
+        if (fastPower != null) {
             invokeRanges(executor, workers, graph.nodeCount(),
                     (startInclusive, endExclusive) -> accumulateAttractionRangeFast(
                             graph,
@@ -148,6 +148,7 @@ public final class DiReLayout {
                             dimensions,
                             kernel,
                             config,
+                            fastPower,
                             startInclusive,
                             endExclusive));
         } else {
@@ -216,6 +217,7 @@ public final class DiReLayout {
             int dimensions,
             KernelParameters kernel,
             LayoutConfig config,
+            FastPower fastPower,
             int startInclusive,
             int endExclusive) {
         int[] offsets = graph.offsets();
@@ -239,7 +241,7 @@ public final class DiReLayout {
                     distSq += dz * dz;
                 }
                 double dist = Math.sqrt(distSq);
-                double distSqB = distSq;
+                double distSqB = fastPower.apply(distSq);
                 double coefficient = config.attractionStrength()
                         * weights[p]
                         * distSqB
@@ -262,12 +264,12 @@ public final class DiReLayout {
             int iteration,
             KernelParameters kernel,
             LayoutConfig config,
-            boolean fastKernel) {
+            FastPower fastPower) {
         if (nodeCount <= 1 || config.negativeSamples() == 0 || config.repulsionStrength() == 0.0f) {
             return;
         }
-        if (fastKernel) {
-            accumulateRepulsionRangeFast(positions, forces, nodeCount, dimensions, iteration, kernel, config, 0, nodeCount);
+        if (fastPower != null) {
+            accumulateRepulsionRangeFast(positions, forces, nodeCount, dimensions, iteration, kernel, config, fastPower, 0, nodeCount);
         } else {
             accumulateRepulsionRange(positions, forces, nodeCount, dimensions, iteration, kernel, config, 0, nodeCount);
         }
@@ -283,11 +285,11 @@ public final class DiReLayout {
             int iteration,
             KernelParameters kernel,
             LayoutConfig config,
-            boolean fastKernel) {
+            FastPower fastPower) {
         if (nodeCount <= 1 || config.negativeSamples() == 0 || config.repulsionStrength() == 0.0f) {
             return;
         }
-        if (fastKernel) {
+        if (fastPower != null) {
             invokeRanges(executor, workers, nodeCount,
                     (startInclusive, endExclusive) -> accumulateRepulsionRangeFast(
                             positions,
@@ -297,6 +299,7 @@ public final class DiReLayout {
                             iteration,
                             kernel,
                             config,
+                            fastPower,
                             startInclusive,
                             endExclusive));
         } else {
@@ -369,6 +372,7 @@ public final class DiReLayout {
             int iteration,
             KernelParameters kernel,
             LayoutConfig config,
+            FastPower fastPower,
             int startInclusive,
             int endExclusive) {
         int samples = Math.min(config.negativeSamples(), nodeCount - 1);
@@ -394,7 +398,7 @@ public final class DiReLayout {
                     distSq += dz * dz;
                 }
                 double dist = Math.sqrt(distSq);
-                double distSqB = distSq;
+                double distSqB = fastPower.apply(distSq);
                 double coefficient = -config.repulsionStrength()
                         / (1.0 + kernel.a * distSqB)
                         * Math.exp(-dist / config.cutoff())

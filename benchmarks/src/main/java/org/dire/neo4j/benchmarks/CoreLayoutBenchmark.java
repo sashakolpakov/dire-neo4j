@@ -90,6 +90,9 @@ public class CoreLayoutBenchmark {
         @Param({"0.0"})
         public float spectralTolerance;
 
+        @Param({"false"})
+        public boolean fastKernel;
+
         SyntheticGraphFactory.Fixture fixture;
         CsrGraph graph;
         LayoutConfig spectralOnlyConfig;
@@ -119,7 +122,8 @@ public class CoreLayoutBenchmark {
                     .randomSeed(42L)
                     .negativeSamples(4)
                     .concurrency(concurrency)
-                    .spectralTolerance(spectralTolerance);
+                    .spectralTolerance(spectralTolerance)
+                    .fastKernel(fastKernel);
         }
     }
 }

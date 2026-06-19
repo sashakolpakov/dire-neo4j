@@ -285,16 +285,8 @@ class DiReLayoutTest {
     }
 
     @Test
-    void fastKernelFallsBackToSlowPathWhenExponentIsNotNearOne() {
-        assertFalse(KernelParameters.fit(1.0e-2f, 1.0f).isNearLinearExponent());
-
+    void fastKernelRemainsDeterministicForNonNearLinearExponent() {
         CsrGraph graph = cycle(16);
-        LayoutConfig slow = LayoutConfig.builder()
-                .iterations(8)
-                .randomSeed(23L)
-                .negativeSamples(4)
-                .concurrency(1)
-                .build();
         LayoutConfig fastRequested = LayoutConfig.builder()
                 .iterations(8)
                 .randomSeed(23L)
@@ -303,17 +295,47 @@ class DiReLayoutTest {
                 .fastKernel(true)
                 .build();
 
-        LayoutResult slowResult = new DiReLayout().run(graph, slow);
-        LayoutResult fallbackResult = new DiReLayout().run(graph, fastRequested);
+        LayoutResult first = new DiReLayout().run(graph, fastRequested);
+        LayoutResult second = new DiReLayout().run(graph, fastRequested);
 
-        assertArrayEquals(slowResult.positionsCopy(), fallbackResult.positionsCopy());
-        assertArrayEquals(slowResult.initialPositionsCopy(), fallbackResult.initialPositionsCopy());
+        assertFinite(first);
+        assertFinite(second);
+        assertArrayEquals(first.positionsCopy(), second.positionsCopy(), 1.0e-6f);
+        assertArrayEquals(first.initialPositionsCopy(), second.initialPositionsCopy(), 1.0e-6f);
     }
 
     @Test
-    void fastKernelNearLinearPathIsDeterministicAndParallelSafe() {
-        assertTrue(KernelParameters.fit(0.2f, 1.0f).isNearLinearExponent());
+    void fastKernelApproximationStaysCloseToExactPath() {
+        CsrGraph graph = cycle(128);
+        LayoutConfig slow = LayoutConfig.builder()
+                .minDist(0.2f)
+                .spread(1.0f)
+                .iterations(12)
+                .randomSeed(31L)
+                .negativeSamples(6)
+                .concurrency(1)
+                .build();
+        LayoutConfig singleWorker = LayoutConfig.builder()
+                .minDist(0.2f)
+                .spread(1.0f)
+                .iterations(12)
+                .randomSeed(31L)
+                .negativeSamples(6)
+                .concurrency(1)
+                .fastKernel(true)
+                .build();
 
+        LayoutResult exact = new DiReLayout().run(graph, slow);
+        LayoutResult approximate = new DiReLayout().run(graph, singleWorker);
+
+        assertFinite(exact);
+        assertFinite(approximate);
+        assertTrue(maxDelta(exact.positionsCopy(), approximate.positionsCopy()) < 0.35f);
+        assertTrue(maxDelta(exact.initialPositionsCopy(), approximate.initialPositionsCopy()) < 0.35f);
+    }
+
+    @Test
+    void fastKernelApproximationIsDeterministicAndParallelSafe() {
         CsrGraph graph = cycle(128);
         LayoutConfig singleWorker = LayoutConfig.builder()
                 .minDist(0.2f)

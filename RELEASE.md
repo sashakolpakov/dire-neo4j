@@ -53,9 +53,8 @@ jars.
 Supported release profiles are Neo4j 5.26.27 and 2026.05.0. Use the artifact
 whose Neo4j version matches the server line exactly.
 
-`fastKernel` is an opt-in performance shortcut for fitted kernels whose
-exponent is close to `1.0`. It defaults to `false`; enabling it may slightly
-perturb coordinates.
+`fastKernel` is an opt-in dyadic exponent approximation path for the force
+kernel. It defaults to `false`; enabling it may slightly perturb coordinates.
 
 ## Breaking Changes To Call Out
 

@@ -95,8 +95,8 @@ RETURN nodeId, initialX, initialY, x, y, initialEmbedding, embedding;
 lists for every streamed row. The scalar coordinate columns are always returned.
 
 `fastKernel` defaults to `false`. Set it to `true` only when you accept the
-near-linear kernel shortcut for fitted `b` values close to `1.0`; the default
-path remains the reproducible scalar kernel.
+dyadic exponent approximation path for the force law; the default path remains
+the reproducible scalar `Math.pow(...)` kernel.
 
 ## Write
 

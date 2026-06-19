@@ -190,9 +190,10 @@ Completed implementation slices:
 - **P2.1 done:** attraction and repulsion kernels reuse per-pair delta locals
   instead of recomputing deltas for force updates. The default deterministic
   path remains covered by existing serial/parallel tests.
-- **P2.2 done:** `fastKernel` is an opt-in near-linear kernel shortcut. The
-  default path still uses the scalar `Math.pow` kernel; when explicitly enabled
-  and fitted `b` is close to `1.0`, attraction/repulsion reuse `distSq` directly.
+- **P2.2 done:** `fastKernel` is an opt-in dyadic exponent approximation path.
+  The default path still uses the scalar `Math.pow` kernel; when explicitly
+  enabled, attraction/repulsion approximate the fitted exponent `b` with a
+  low-cost dyadic rational chosen once per run.
 - **N1 done:** plugin classes renamed to the `DiRe*` convention (`DiReProcedures`,
   `DiReConfig`, `DiReViewResource`, `DiReProceduresTest`) to match `DiReLayout`.
   Safe rename: the unmanaged extension is registered by package
@@ -345,10 +346,11 @@ regenerated golden vectors.
 - **P2.1 Done - fuse the double delta pass.** `accumulate*Range` now computes
   per-pair delta locals once, reuses them for distance and force updates, and
   keeps the default deterministic path covered by serial/parallel tests.
-- **P2.2 Done - special-case `b ~= 1`.** `fastKernel` defaults to false. When
-  explicitly enabled and the fitted exponent is close to `1.0`, attraction and
-  repulsion use `distSq` directly instead of `Math.pow(distSq, b)`, with branch
-  selection outside hot loops.
+- **P2.2 Done - dyadic approximation path.** `fastKernel` defaults to false.
+  When explicitly enabled, the fitted exponent is approximated once per run by
+  a low-cost dyadic rational `m / 2^n`, and attraction/repulsion replace
+  `Math.pow(distSq, b)` with repeated square roots plus integer powering inside
+  the hot loops.
 - **P2.4 done - convergence-checked spectral iterations.**
   `spectralTolerance=0.0` preserves the fixed 160-iteration path.
   Positive tolerance enables a deterministic normalized subspace-distance

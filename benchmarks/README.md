@@ -35,7 +35,8 @@ java -jar benchmarks/target/benchmarks.jar CoreLayoutBenchmark \
   -p longRangeEdgesPerNode=1 \
   -p iterations=3 \
   -p concurrency=1 \
-  -p spectralTolerance=0.0
+  -p spectralTolerance=0.0 \
+  -p fastKernel=false
 ```
 
 The benchmark methods cover:
@@ -48,6 +49,9 @@ The benchmark methods cover:
 Compare fixed and convergence-checked spectral initialization by running
 `spectralInitialization` with `-p spectralTolerance=0.0` and a positive value
 such as `-p spectralTolerance=0.0001`.
+
+Compare exact and approximate force-law paths by varying `-p fastKernel=false`
+and `-p fastKernel=true`.
 
 ## Local Scale Runs
 
