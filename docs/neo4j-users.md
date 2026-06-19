@@ -3,6 +3,9 @@
 This guide covers installing `dire-neo4j` into a Neo4j server, running DiRe on
 an existing graph, and viewing the resulting coordinates in the bundled viewer.
 
+The plugin is implemented and packaged for Neo4j `5.26.27` and `2026.05.0`.
+Use the jar that matches your Neo4j server line exactly.
+
 ## What You Install
 
 `dire-neo4j` is a Neo4j server plugin. The jar provides:
@@ -18,11 +21,11 @@ Neo4j process after the jar is installed.
 
 ## Requirements
 
-- Neo4j server with plugin support.
+- Self-managed Neo4j server with plugin support.
 - Java compatible with your Neo4j distribution. Neo4j 2026 uses Java 21.
 - Maven, if building from source.
 
-Release profiles target Neo4j 5.26 and 2026.05.
+Release profiles target Neo4j 5.26.27 and 2026.05.0.
 
 Managed Neo4j services such as Aura do not allow installing arbitrary server
 plugin jars.
@@ -63,6 +66,13 @@ Copy the jar into the Neo4j plugins directory:
 cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 ```
 
+For a local build, copy:
+
+```sh
+cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
+  "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+```
+
 Add these settings to `neo4j.conf`:
 
 ```properties
@@ -72,6 +82,35 @@ server.unmanaged_extension_classes=org.dire.neo4j.plugin=/dire
 ```
 
 Restart Neo4j.
+
+## Verify Installation
+
+In Neo4j Browser or `cypher-shell`:
+
+```cypher
+SHOW PROCEDURES
+YIELD name
+WHERE name STARTS WITH 'dire.'
+RETURN name
+ORDER BY name;
+```
+
+Expected procedure names:
+
+```text
+dire.layout.estimate
+dire.layout.stats
+dire.layout.stream
+dire.layout.write
+```
+
+Open the viewer:
+
+```text
+http://localhost:7474/dire/
+```
+
+Use your configured HTTP port if it is not `7474`.
 
 ## Homebrew Example
 
@@ -113,35 +152,6 @@ docker run --rm \
 The same command works with a locally built jar if you replace the mounted jar
 path with `neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar`.
 
-## Verify Installation
-
-In Neo4j Browser or `cypher-shell`:
-
-```cypher
-SHOW PROCEDURES
-YIELD name
-WHERE name STARTS WITH 'dire.'
-RETURN name
-ORDER BY name;
-```
-
-Expected procedure names:
-
-```text
-dire.layout.estimate
-dire.layout.stats
-dire.layout.stream
-dire.layout.write
-```
-
-Open the viewer:
-
-```text
-http://localhost:7474/dire/
-```
-
-Use your configured HTTP port if it is not `7474`.
-
 ## Run DiRe On Your Graph
 
 The layout procedure reads a graph projection from two Cypher queries:
@@ -149,6 +159,9 @@ The layout procedure reads a graph projection from two Cypher queries:
 - `nodeQuery` must return `id`.
 - `relationshipQuery` must return `source` and `target`.
 - `relationshipQuery` may also return `weight`.
+- Numeric `id(...)` values and string `elementId(...)` values are both
+  supported, but the node and relationship queries must use the same identity
+  type.
 
 Example for `(:Paper)-[:CITES]->(:Paper)`:
 
@@ -178,6 +191,11 @@ This writes:
 
 - `dire_x`, `dire_y`: final DiRe coordinates.
 - `dire_initial_x`, `dire_initial_y`: initial coordinates before refinement.
+
+By default, spectral initialization runs a fixed 160 power iterations to
+preserve the historical output. Set `spectralTolerance` above zero to enable
+deterministic convergence checks. `spectralMinIterations` defaults to `8`, and
+`spectralMaxIterations` defaults to `160`.
 
 ## Add A Wide Layout
 

@@ -6,11 +6,21 @@ and streams or writes the resulting coordinates.
 
 ## Install
 
-Build and copy the plugin jar:
+Build the plugin jar for the Neo4j line you are targeting, then copy it into
+Neo4j's active `plugins` directory:
 
 ```sh
-mvn package
-cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar "$NEO4J_HOME/plugins/"
+mvn -Pneo4j-5.26 package
+cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
+  "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+```
+
+Or:
+
+```sh
+mvn -Pneo4j-2026.05 package
+cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
+  "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 ```
 
 Enable procedures and the installable viewer in `neo4j.conf`:
@@ -29,6 +39,16 @@ http://localhost:7474/dire/
 
 The viewer is served by the plugin jar. It renders stored coordinate properties
 directly and includes editable node/edge Cypher queries.
+
+Verify that the procedures are available:
+
+```cypher
+SHOW PROCEDURES
+YIELD name
+WHERE name STARTS WITH 'dire.'
+RETURN name
+ORDER BY name;
+```
 
 ## Required query columns
 
@@ -51,6 +71,8 @@ RETURN coalesce(r.weight, 1.0) AS weight
 ```
 
 Weights must be finite and non-negative. Zero-weight relationships are ignored.
+Numeric `id(...)` values and string `elementId(...)` values are both supported
+when the node and relationship queries use the same identity type.
 
 ## Stream
 
@@ -108,6 +130,11 @@ ORDER BY n.name;
 `concurrency` controls the number of worker threads used by the attraction and
 repulsion kernels. The default is `min(availableProcessors, 8)`. Use
 `concurrency: 1` when comparing exact single-thread timings.
+
+Spectral initialization defaults to the historical fixed 160 power iterations.
+Set `spectralTolerance` above zero to enable deterministic convergence checks.
+`spectralMinIterations` defaults to `8`, and `spectralMaxIterations` defaults
+to `160`.
 
 ## Warm start
 

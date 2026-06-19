@@ -77,7 +77,9 @@ Existing Neo4j Graphs
 ---------------------
 
 For an existing graph, no import step is needed. Write a projection that returns
-the node ids and relationship endpoints you want to lay out:
+the node ids and relationship endpoints you want to lay out. The node and
+relationship queries may use either numeric ``id(...)`` values or string
+``elementId(...)`` values, but they must use the same identity type:
 
 .. code-block:: cypher
 

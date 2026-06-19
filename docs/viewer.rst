@@ -13,7 +13,8 @@ What The Viewer Reads
 ---------------------
 
 The viewer reads coordinates already stored on Neo4j nodes. It does not run a
-layout by itself and does not create a separate visualization graph.
+layout by itself and does not create a separate visualization graph. Run
+``dire.layout.write`` first, then open ``/dire/``.
 
 Recognized coordinate pairs:
 

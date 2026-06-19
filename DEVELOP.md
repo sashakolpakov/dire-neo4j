@@ -154,10 +154,9 @@ tested without a database process.
 
 ## Improvement Plan
 
-This section reviews the implemented codebase against the three project goals
-and lays out a prioritized roadmap. It supersedes the forward-looking notes
-above where they conflict; the sections above describe intent, this section
-describes what to change next.
+This section records the implemented codebase against the three project goals
+and replaces the older forward-looking roadmap. Where the sections above still
+read as design intent, this section is the current implementation record.
 
 ### Current Progress
 

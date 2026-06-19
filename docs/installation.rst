@@ -7,6 +7,13 @@ What Gets Installed
 ``dire-neo4j`` installs as a Neo4j server plugin. The jar contains both the
 stored procedures and the unmanaged ``/dire/`` viewer.
 
+Supported plugin targets:
+
+* Neo4j ``5.26.27``
+* Neo4j ``2026.05.0``
+
+Use the jar that matches the Neo4j server line exactly.
+
 Installed procedures:
 
 * ``dire.layout.write``
@@ -28,8 +35,8 @@ with both the plugin and Neo4j versions, for example:
 
    dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar
 
-Release builds cover Neo4j 5.26 and 2026.05. Use the artifact whose Neo4j
-version matches the server line.
+Release builds cover Neo4j 5.26.27 and 2026.05.0. Use the artifact whose
+Neo4j version matches the server line exactly.
 
 Use this with a self-managed Neo4j server that allows custom server plugins.
 Managed Neo4j services such as Aura do not allow installing arbitrary plugin
@@ -57,14 +64,21 @@ The plugin jar is:
 
    neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar
 
-Install In A Usual Neo4j Server
--------------------------------
+Install In Neo4j
+----------------
 
 Stop Neo4j before replacing plugin jars.
 
 .. code-block:: sh
 
    cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+
+For a local build, copy:
+
+.. code-block:: sh
+
+   cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
+     "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 
 Add to ``neo4j.conf``:
 
@@ -146,3 +160,16 @@ Open the viewer:
 .. code-block:: text
 
    http://localhost:7474/dire/
+
+Quick Start
+-----------
+
+After installation:
+
+1. Load or keep your graph in Neo4j.
+2. Run ``CALL dire.layout.write(...)``.
+3. Open ``/dire/`` on the Neo4j HTTP port.
+
+The node projection must return ``id``. The relationship projection must return
+``source`` and ``target``. Optional ``weight`` values must be finite and
+non-negative.

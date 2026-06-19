@@ -127,6 +127,7 @@ Projection Rules
 * ``relationshipQuery`` must return matching numeric or string ``source`` and
   ``target`` values.
 * Optional ``weight`` values must be finite and non-negative.
+* Zero-weight relationships are ignored.
 * Relationships whose endpoints are not present in ``nodeQuery`` cannot be used.
 
 Write Transaction Semantics

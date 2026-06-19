@@ -26,6 +26,8 @@ It may also return:
    RETURN coalesce(r.weight, 1.0) AS weight
 
 All relationship endpoints must be included by ``nodeQuery``.
+Numeric ``id(...)`` values and string ``elementId(...)`` values are both
+supported when the node and relationship queries use the same identity type.
 
 Write Coordinates
 -----------------
@@ -64,6 +66,11 @@ The output properties are normal Neo4j node properties:
 Omit ``writeBatchSize`` to keep all writes in the caller transaction. When it
 is set, each chunk commits independently; use this for large committed
 projections only, because partial results remain if a later batch fails.
+
+By default, spectral initialization preserves the historical fixed 160
+power-iteration behavior. Set ``spectralTolerance`` above zero to enable
+deterministic convergence checks. ``spectralMinIterations`` defaults to ``8``,
+and ``spectralMaxIterations`` defaults to ``160``.
 
 Wide Variant
 ------------

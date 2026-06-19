@@ -50,8 +50,8 @@ The release jar is for self-managed Neo4j servers that allow custom plugins.
 Managed services such as Aura do not support installing arbitrary server plugin
 jars.
 
-Supported release profiles are Neo4j 5.26 and 2026.05. Use the artifact whose
-Neo4j version matches the server line.
+Supported release profiles are Neo4j 5.26.27 and 2026.05.0. Use the artifact
+whose Neo4j version matches the server line exactly.
 
 `fastKernel` is an opt-in performance shortcut for fitted kernels whose
 exponent is close to `1.0`. It defaults to `false`; enabling it may slightly
