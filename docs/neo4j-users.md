@@ -22,8 +22,7 @@ Neo4j process after the jar is installed.
 - Java compatible with your Neo4j distribution. Neo4j 2026 uses Java 21.
 - Maven, if building from source.
 
-The current build targets the Neo4j Java API declared in `pom.xml` and is tested
-locally against the Homebrew Neo4j package.
+Release profiles target Neo4j 5.26 and 2026.05.
 
 Managed Neo4j services such as Aura do not allow installing arbitrary server
 plugin jars.
@@ -35,14 +34,17 @@ line from <https://github.com/sashakolpakov/dire-neo4j/releases>. Release
 assets include both versions in the filename:
 
 ```text
-dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar
+dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar
 ```
 
 To build the jar yourself, run this from the repository root:
 
 
 ```sh
-mvn package
+mvn -Pneo4j-5.26 package
+
+# Or:
+mvn -Pneo4j-2026.05 package
 ```
 
 The plugin jar is produced at:
@@ -58,7 +60,7 @@ Stop Neo4j before replacing plugins.
 Copy the jar into the Neo4j plugins directory:
 
 ```sh
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 ```
 
 Add these settings to `neo4j.conf`:
@@ -76,7 +78,7 @@ Restart Neo4j.
 ```sh
 brew install neo4j
 
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar \
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar \
   "$(brew --prefix neo4j)/libexec/plugins/dire-neo4j-plugin.jar"
 ```
 
@@ -100,12 +102,12 @@ Mount the jar into `/plugins` and pass the required Neo4j settings:
 docker run --rm \
   --name dire-neo4j \
   -p 7474:7474 -p 7687:7687 \
-  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar:/plugins/dire-neo4j-plugin.jar:ro" \
+  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar:/plugins/dire-neo4j-plugin.jar:ro" \
   -e NEO4J_AUTH=neo4j/password \
   -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
   -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
   -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
-  neo4j:5.26.0
+  neo4j:5.26.27
 ```
 
 The same command works with a locally built jar if you replace the mounted jar

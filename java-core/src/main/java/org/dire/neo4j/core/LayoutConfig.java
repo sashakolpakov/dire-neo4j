@@ -17,6 +17,9 @@ public final class LayoutConfig {
     private final int negativeSamples;
     private final int concurrency;
     private final boolean fastKernel;
+    private final float spectralTolerance;
+    private final int spectralMinIterations;
+    private final int spectralMaxIterations;
 
     private LayoutConfig(Builder builder) {
         this.dimensions = builder.dimensions;
@@ -33,6 +36,9 @@ public final class LayoutConfig {
         this.negativeSamples = builder.negativeSamples;
         this.concurrency = builder.concurrency;
         this.fastKernel = builder.fastKernel;
+        this.spectralTolerance = builder.spectralTolerance;
+        this.spectralMinIterations = builder.spectralMinIterations;
+        this.spectralMaxIterations = builder.spectralMaxIterations;
         validate();
     }
 
@@ -100,6 +106,18 @@ public final class LayoutConfig {
         return fastKernel;
     }
 
+    public float spectralTolerance() {
+        return spectralTolerance;
+    }
+
+    public int spectralMinIterations() {
+        return spectralMinIterations;
+    }
+
+    public int spectralMaxIterations() {
+        return spectralMaxIterations;
+    }
+
     private void validate() {
         if (dimensions < 2 || dimensions > 3) {
             throw new IllegalArgumentException("dimensions must be 2 or 3");
@@ -131,6 +149,15 @@ public final class LayoutConfig {
         if (concurrency <= 0) {
             throw new IllegalArgumentException("concurrency must be positive");
         }
+        if (!Float.isFinite(spectralTolerance) || spectralTolerance < 0.0f || spectralTolerance > 1.0f) {
+            throw new IllegalArgumentException("spectralTolerance must be finite and between 0 and 1");
+        }
+        if (spectralMinIterations <= 0) {
+            throw new IllegalArgumentException("spectralMinIterations must be positive");
+        }
+        if (spectralMaxIterations < spectralMinIterations) {
+            throw new IllegalArgumentException("spectralMaxIterations must be at least spectralMinIterations");
+        }
     }
 
     public static final class Builder {
@@ -148,6 +175,9 @@ public final class LayoutConfig {
         private int negativeSamples = 16;
         private int concurrency = LayoutConfig.defaultConcurrency();
         private boolean fastKernel = false;
+        private float spectralTolerance = 0.0f;
+        private int spectralMinIterations = 8;
+        private int spectralMaxIterations = 160;
 
         public Builder dimensions(int dimensions) {
             this.dimensions = dimensions;
@@ -216,6 +246,21 @@ public final class LayoutConfig {
 
         public Builder fastKernel(boolean fastKernel) {
             this.fastKernel = fastKernel;
+            return this;
+        }
+
+        public Builder spectralTolerance(float spectralTolerance) {
+            this.spectralTolerance = spectralTolerance;
+            return this;
+        }
+
+        public Builder spectralMinIterations(int spectralMinIterations) {
+            this.spectralMinIterations = spectralMinIterations;
+            return this;
+        }
+
+        public Builder spectralMaxIterations(int spectralMaxIterations) {
+            this.spectralMaxIterations = spectralMaxIterations;
             return this;
         }
 

@@ -34,7 +34,8 @@ java -jar benchmarks/target/benchmarks.jar CoreLayoutBenchmark \
   -p nodeCount=1000 \
   -p longRangeEdgesPerNode=1 \
   -p iterations=3 \
-  -p concurrency=1
+  -p concurrency=1 \
+  -p spectralTolerance=0.0
 ```
 
 The benchmark methods cover:
@@ -43,6 +44,10 @@ The benchmark methods cover:
 - `spectralInitialization`: `DiReLayout.run` with spectral init and `iterations=0`.
 - `randomInitLayout`: layout iterations with random initialization, useful for kernel timing.
 - `fullSpectralLayout`: spectral initialization plus layout iterations.
+
+Compare fixed and convergence-checked spectral initialization by running
+`spectralInitialization` with `-p spectralTolerance=0.0` and a positive value
+such as `-p spectralTolerance=0.0001`.
 
 ## Local Scale Runs
 

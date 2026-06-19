@@ -219,6 +219,16 @@ Completed implementation slices:
 - **P4.2 done:** exact golden vectors pin deterministic core output, a
   `large-tests` profile runs a 100k-node layout smoke test, and viewer tests
   assert the built-in payload leaves node/relationship counts unchanged.
+- **P3.3 done:** Maven profiles, CI, smoke tests, and release packaging cover
+  Neo4j 5.26.27 and 2026.05.0. Both lines use JAX-RS 2.x: the
+  `jakarta.ws.rs-api:2.1.6` artifact intentionally exports `javax.ws.rs`, which
+  matches the unmanaged-extension imports. The Neo4j 2026 profile aligns tests
+  with JUnit Platform 6.
+- **P2.4 done:** spectral initialization accepts opt-in
+  `spectralTolerance`, `spectralMinIterations`, and `spectralMaxIterations`.
+  Zero tolerance preserves the historical fixed 160 iterations and golden
+  vectors; positive tolerance uses a deterministic normalized subspace-distance
+  check after the configured floor.
 
 Current verification:
 
@@ -234,8 +244,8 @@ Next implementation decision:
 ```text
 S1 complete: P2.5 -> P3.1
 S2 complete: P1.3 -> P4.1b -> P4.2
-S3: P3.3 -> P2.4
-S4: P2.3 -> P3.2
+S3 complete: P3.3 -> P2.4
+S4 dropped: vector-kernel and GDS integration work removed from this roadmap
 ```
 
 Rationale:
@@ -247,10 +257,10 @@ Rationale:
 - **P1.3/P4.1b/P4.2** should follow before deeper kernel changes because write
   batching and peak-heap benchmarks determine whether memory-at-scale is
   actually fixed.
-- **P3.3** should precede packaging/release work and any GDS integration because
-  the Neo4j API line and `javax`/`jakarta` boundary define supported artifacts.
-- **P2.3** stays late: Vector API work is high-risk and only justified after
-  scalar/profile work and benchmark baselines exist.
+- **P3.3** now makes the supported Neo4j lines and JAX-RS 2.x namespace
+  explicit in build, CI, smoke, and release paths.
+- **P2.4** is opt-in, so default output remains bit-exact while callers can
+  trade spectral initialization work for a measured convergence threshold.
 
 ### Conformance Verdict
 
@@ -258,12 +268,11 @@ Rationale:
 Goal                                  Verdict   Core reason
 ------------------------------------  --------  ----------------------------------------
 Idiomatic, easy-to-install plugin     Partial   Viewer arbitrary Cypher is locked down
-                                                 and elementId is supported; no GDS
-                                                 catalog integration yet.
+                                                 and versioned artifacts cover both
+                                                 supported Neo4j lines.
 Uses kernels to speed up computation  Partial   Kernels are scalar double math with
-                                                 Math.pow/sqrt/exp per sample, delta vector
-                                                 computed twice per edge, no SIMD, fixed
-                                                 160 spectral iterations. ~2-4x headroom.
+                                                 Math.pow/sqrt/exp per sample; spectral
+                                                 convergence is now opt-in.
 Memory-sparing at scale               Partial   Core CSR/transient loader copies and
                                                  stream materialization are reduced;
                                                  write tx batching, elementId overhead,
@@ -341,15 +350,16 @@ regenerated golden vectors.
   explicitly enabled and the fitted exponent is close to `1.0`, attraction and
   repulsion use `distSq` directly instead of `Math.pow(distSq, b)`, with branch
   selection outside hot loops.
-- **P2.3 Vectorize the repulsion kernel** (`jdk.incubator.vector`) over its
-  uniform O(n * negativeSamples) structure. Effort L, high risk: incubator API
-  + reordered float reductions break bit-exactness. Ship as opt-in
-  `kernelMode: 'vector'`; scalar stays the deterministic default. Do *after*
-  P4.1 so it is measured.
-- **P2.4 Convergence-checked spectral iterations.** `SpectralInitializer` runs a
-  fixed 160 power iterations; add a Rayleigh/subspace-angle convergence check
-  with a floor and the 160 cap. Effort M. Changes results - gate behind
-  `spectralTolerance` (default = current fixed behavior).
+- **P2.4 done - convergence-checked spectral iterations.**
+  `spectralTolerance=0.0` preserves the fixed 160-iteration path.
+  Positive tolerance enables a deterministic normalized subspace-distance
+  check after `spectralMinIterations` (default 8), bounded by
+  `spectralMaxIterations` (default 160). Checks run at the floor and every
+  eight iterations afterward. A 1k-node JMH smoke measured 6.59 ms/op fixed,
+  6.69 ms/op with a strict `0.0001` tolerance that reached the cap, and
+  4.07 ms/op with tolerance `1.0` stopping at the floor. The loose run changed
+  normalized coordinates substantially, so tolerance remains an explicit
+  quality/runtime control rather than a new default.
 - **P2.5 done - profile `recenter`** (serial every iteration, O(n*d)).
   `recenter` was extracted to `Recenter.apply` and measured with a dedicated
   JMH harness. A parallel double mean would require deterministic reduction,
@@ -387,17 +397,11 @@ regenerated golden vectors.
   backpressure. An `ExecutorService` constructor supports host-managed
   execution; executors remain caller-owned. The no-arg constructor and
   source-range partitioning are preserved.
-- **P3.2 GDS graph-catalog projection support.** Optional second loader reading a
-  named GDS graph instead of re-running Cypher (ease + memory reuse). Effort L.
-  Ship as a separate optional artifact - GDS is a heavy `provided` dependency
-  with its own version matrix.
-- **P3.3 Neo4j version matrix + `javax`->`jakarta` fix.** POM builds against a
-  single Neo4j 5.26.0 though the README promises a jar per Neo4j line.
-  Parameterize `neo4j.version` via profiles and a CI matrix. Note:
-  `neo4j-plugin/pom.xml` declares `jakarta.ws.rs-api` but `DiReViewResource`
-  imports `javax.ws.rs.*` - this only works on lines that still provide `javax`
-  and will break otherwise. Effort M. Non-breaking to users; fixes a latent
-  incompatibility.
+- **P3.3 done - Neo4j version matrix + JAX-RS cleanup.** The
+  `neo4j-5.26` and `neo4j-2026.05` profiles pin 5.26.27 and 2026.05.0.
+  CI and releases build and smoke both artifacts. Both Neo4j lines still use
+  JAX-RS 2.x, whose Jakarta-owned 2.1 API artifact exports `javax.ws.rs`;
+  imports therefore remain intentionally `javax`.
 
 ### P4 - Quality / benchmarks
 
@@ -424,33 +428,17 @@ Done: P2.5 (profiled; recenter remains serial) -> P3.1 (shared/injected executor
 
 S1 Immediate: complete
 S2 Scale validation: complete
-S3 Packaging + safe algorithm controls: P3.3 -> P2.4
-S4 Optional/high-risk: P2.3 -> P3.2 (GDS)
+S3 Packaging + safe algorithm controls: complete
+S4 Optional/high-risk: dropped from the project roadmap
 ```
 
 Backward-incompatible items to call out in release notes: P0.1 is already a
 security-breaking viewer change; P1.2 only if embeddings are dropped by default;
-P1.3 if batched writes change atomicity; P3.3 for `javax`->`jakarta` on newer
-Neo4j lines. P3.1 preserved the no-arg `DiReLayout` construction path.
+P1.3 if batched writes change atomicity. P3.1 preserved the no-arg
+`DiReLayout` construction path; P3.3 keeps the JAX-RS package namespace
+unchanged because both supported lines use JAX-RS 2.x.
 
 ### Next Task Details
 
-1. **S3.1 / P3.3 - Neo4j version matrix and `javax`/`jakarta` cleanup.**
-   Parameterize supported Neo4j versions via Maven profiles and CI matrix.
-   Resolve the `jakarta.ws.rs-api` dependency versus `javax.ws.rs.*` imports so
-   the unmanaged extension builds intentionally for each supported Neo4j line.
-
-2. **S3.2 / P2.4 - Convergence-checked spectral iterations.**
-   Add `spectralTolerance` and related floor/cap controls with defaults that
-   preserve the current fixed 160-iteration behavior. Gate changed output behind
-   explicit config and compare quality/runtime with the P4.1b benchmark suite.
-
-3. **S4.1 / P2.3 - Optional vector repulsion kernel.**
-   Only start after P4.1b/P4.2 baselines exist. Ship as opt-in
-   `kernelMode: 'vector'`, keep scalar deterministic default, and expect golden
-   vector differences because reduction/order changes are likely.
-
-4. **S4.2 / P3.2 - Optional GDS graph-catalog loader.**
-   Defer until the plugin packaging matrix is stable. Implement as a separate
-   optional artifact or profile because GDS introduces a heavy provided
-   dependency and version matrix.
+S3 is complete. S4 has been removed from the project roadmap; there is no
+planned Vector API kernel or GDS graph-catalog integration sequence.

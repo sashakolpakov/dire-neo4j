@@ -19,6 +19,7 @@ Common config:
 * ``iterations``
 * ``randomSeed``
 * ``concurrency``
+* ``spectralTolerance``
 * ``relationshipMode``
 * ``negativeSamples``
 * ``attractionStrength``
@@ -90,6 +91,15 @@ Configuration Reference
    * - ``fastKernel``
      - ``false``
      - opt-in shortcut for near-linear kernels; may slightly perturb coordinates
+   * - ``spectralTolerance``
+     - ``0.0``
+     - opt-in normalized subspace convergence threshold; zero keeps fixed iterations
+   * - ``spectralMinIterations``
+     - ``8``
+     - minimum spectral power iterations before convergence can stop
+   * - ``spectralMaxIterations``
+     - ``160``
+     - spectral power-iteration cap
    * - ``maxProjectionBytes``
      - unset
      - optional fail-fast projection memory cap

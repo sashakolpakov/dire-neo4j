@@ -32,8 +32,11 @@ Download the release jar for your Neo4j line from
 Release assets are named with both the plugin and Neo4j versions, for example:
 
 ```text
-dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar
+dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar
 ```
+
+Release builds currently cover Neo4j 5.26 and 2026.05. Use the artifact whose
+Neo4j version matches the server line.
 
 Use this with a self-managed Neo4j server that allows custom server plugins.
 Managed Neo4j services such as Aura do not allow installing arbitrary plugin
@@ -47,8 +50,11 @@ Java 21 is recommended for current Neo4j releases.
 export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-mvn test
-mvn package
+mvn -Pneo4j-5.26 test
+mvn -Pneo4j-5.26 package
+
+# Or build against Neo4j 2026.05:
+mvn -Pneo4j-2026.05 package
 ```
 
 The local server plugin jar is written to:
@@ -63,7 +69,7 @@ Stop Neo4j, copy the jar into the server plugin directory, configure Neo4j, and
 restart.
 
 ```sh
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 ```
 
 Add to `neo4j.conf`:
@@ -107,7 +113,7 @@ brew install openjdk@21 neo4j
 export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar \
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar \
   "$(brew --prefix neo4j)/libexec/plugins/dire-neo4j-plugin.jar"
 ```
 
@@ -129,12 +135,12 @@ NEO4J_CONF="$(brew --prefix neo4j)/libexec/conf" neo4j console
 docker run --rm \
   --name dire-neo4j \
   -p 7474:7474 -p 7687:7687 \
-  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar:/plugins/dire-neo4j-plugin.jar:ro" \
+  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar:/plugins/dire-neo4j-plugin.jar:ro" \
   -e NEO4J_AUTH=neo4j/password \
   -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
   -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
   -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
-  neo4j:5.26.0
+  neo4j:5.26.27
 ```
 
 The same command works with a locally built jar if you replace the mounted jar
@@ -266,6 +272,7 @@ CALL dire.layout.write({
   iterations: 200,
   randomSeed: 42,
   concurrency: 8,
+  spectralTolerance: 0.0001,
   writeBatchSize: 10000
 })
 YIELD nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength
@@ -283,6 +290,11 @@ positive node count, writes commit in independent chunks after projection and
 layout complete. This reduces transaction size but is intentionally non-atomic:
 earlier batches remain committed if a later batch fails, and uncommitted caller
 changes are not visible to batch transactions.
+
+Spectral initialization keeps the historical fixed 160 iterations by default.
+Set `spectralTolerance` above zero to enable deterministic subspace-convergence
+checks. `spectralMinIterations` defaults to `8`, and
+`spectralMaxIterations` defaults to `160`.
 
 ## Add A Wider Variant
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-NEO4J_VERSION="${NEO4J_VERSION:-5.26.0}"
+NEO4J_VERSION="${NEO4J_VERSION:-5.26.27}"
 NEO4J_IMAGE="${NEO4J_IMAGE:-neo4j:${NEO4J_VERSION}}"
 NEO4J_USER="${NEO4J_USER:-neo4j}"
 NEO4J_PASSWORD="${NEO4J_PASSWORD:-password}"

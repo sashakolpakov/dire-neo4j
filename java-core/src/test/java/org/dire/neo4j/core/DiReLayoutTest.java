@@ -66,6 +66,71 @@ class DiReLayoutTest {
     }
 
     @Test
+    void spectralConvergenceDefaultsPreserveFixed160Iterations() {
+        LayoutConfig defaults = LayoutConfig.builder()
+                .iterations(0)
+                .randomSeed(13L)
+                .build();
+        LayoutConfig explicitFixed = LayoutConfig.builder()
+                .iterations(0)
+                .randomSeed(13L)
+                .spectralTolerance(0.0f)
+                .spectralMinIterations(8)
+                .spectralMaxIterations(160)
+                .build();
+
+        assertEquals(0.0f, defaults.spectralTolerance());
+        assertEquals(8, defaults.spectralMinIterations());
+        assertEquals(160, defaults.spectralMaxIterations());
+
+        LayoutResult defaultResult = new DiReLayout().run(cycle(32), defaults);
+        LayoutResult explicitResult = new DiReLayout().run(cycle(32), explicitFixed);
+
+        assertArrayEquals(defaultResult.initialPositionsCopy(), explicitResult.initialPositionsCopy());
+        assertArrayEquals(defaultResult.positionsCopy(), explicitResult.positionsCopy());
+    }
+
+    @Test
+    void spectralToleranceStopsAtConfiguredIterationFloor() {
+        LayoutConfig convergenceChecked = LayoutConfig.builder()
+                .iterations(0)
+                .randomSeed(29L)
+                .spectralTolerance(1.0f)
+                .spectralMinIterations(4)
+                .spectralMaxIterations(160)
+                .build();
+        LayoutConfig fixedFourIterations = LayoutConfig.builder()
+                .iterations(0)
+                .randomSeed(29L)
+                .spectralTolerance(0.0f)
+                .spectralMinIterations(4)
+                .spectralMaxIterations(4)
+                .build();
+
+        LayoutResult converged = new DiReLayout().run(path(64), convergenceChecked);
+        LayoutResult fixed = new DiReLayout().run(path(64), fixedFourIterations);
+
+        assertFinite(converged);
+        assertArrayEquals(fixed.initialPositionsCopy(), converged.initialPositionsCopy());
+        assertArrayEquals(fixed.positionsCopy(), converged.positionsCopy());
+    }
+
+    @Test
+    void spectralConvergenceControlsAreValidated() {
+        assertThrows(IllegalArgumentException.class,
+                () -> LayoutConfig.builder().spectralTolerance(Float.NaN).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> LayoutConfig.builder().spectralTolerance(1.01f).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> LayoutConfig.builder().spectralMinIterations(0).build());
+        assertThrows(IllegalArgumentException.class,
+                () -> LayoutConfig.builder()
+                        .spectralMinIterations(10)
+                        .spectralMaxIterations(9)
+                        .build());
+    }
+
+    @Test
     @Tag("large")
     void largeGraphLayoutSmokeTest() {
         CsrGraph graph = cycle(100_000);

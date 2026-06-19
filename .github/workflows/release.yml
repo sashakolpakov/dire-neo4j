@@ -32,7 +32,6 @@ jobs:
         shell: bash
         run: |
           project_version="$(mvn -q -DforceStdout help:evaluate -Dexpression=project.version)"
-          neo4j_version="$(mvn -q -DforceStdout help:evaluate -Dexpression=neo4j.version)"
 
           if [[ "$project_version" == *-SNAPSHOT ]]; then
             echo "::error::Refusing to publish a SNAPSHOT version: $project_version"
@@ -51,56 +50,54 @@ jobs:
 
           {
             echo "project_version=$project_version"
-            echo "neo4j_version=$neo4j_version"
             echo "tag_name=$tag_name"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Maven verify
-        run: mvn -B -ntp verify
-
-      - name: Smoke test installable plugin
-        env:
-          NEO4J_VERSION: ${{ steps.version.outputs.neo4j_version }}
-        run: scripts/neo4j-smoke.sh
-
-      - name: Prepare release artifact
+      - name: Build, test, and prepare release artifacts
         id: artifact
         shell: bash
         env:
           PROJECT_VERSION: ${{ steps.version.outputs.project_version }}
-          NEO4J_VERSION: ${{ steps.version.outputs.neo4j_version }}
         run: |
           mkdir -p dist
-          source_jar="neo4j-plugin/target/dire-neo4j-plugin-${PROJECT_VERSION}.jar"
-          release_jar="dist/dire-neo4j-plugin-${PROJECT_VERSION}-neo4j-${NEO4J_VERSION}.jar"
+          profiles=("neo4j-5.26" "neo4j-2026.05")
+          for profile in "${profiles[@]}"; do
+            neo4j_version="$(mvn -q -P"$profile" -DforceStdout help:evaluate -Dexpression=neo4j.version)"
+            source_jar="neo4j-plugin/target/dire-neo4j-plugin-${PROJECT_VERSION}.jar"
+            release_jar="dist/dire-neo4j-plugin-${PROJECT_VERSION}-neo4j-${neo4j_version}.jar"
 
-          if [[ ! -f "$source_jar" ]]; then
-            echo "::error::Expected shaded jar not found: $source_jar"
-            exit 1
-          fi
+            mvn -B -ntp -P"$profile" -pl neo4j-plugin -am clean verify
+            NEO4J_VERSION="$neo4j_version" \
+              CONTAINER_NAME="dire-neo4j-release-${neo4j_version}" \
+              scripts/neo4j-smoke.sh "$source_jar"
 
-          cp "$source_jar" "$release_jar"
-          shasum -a 256 "$release_jar" > "${release_jar}.sha256"
+            if [[ ! -f "$source_jar" ]]; then
+              echo "::error::Expected shaded jar not found: $source_jar"
+              exit 1
+            fi
+
+            cp "$source_jar" "$release_jar"
+            shasum -a 256 "$release_jar" > "${release_jar}.sha256"
+          done
 
           cat > dist/RELEASE_NOTES.md <<NOTES
           dire-neo4j ${PROJECT_VERSION}
 
           Compatibility:
-          - Neo4j ${NEO4J_VERSION}
+          - Neo4j 5.26.27
+          - Neo4j 2026.05.0
           - Self-managed Neo4j servers with custom plugins enabled
 
           Install:
-          1. Download the jar attached to this release.
+          1. Download the jar matching your Neo4j server line.
           2. Copy it to the Neo4j plugins directory.
           3. Add the dire.* allowlist, unrestricted procedure setting, and /dire unmanaged extension setting.
           4. Restart Neo4j and verify with SHOW PROCEDURES.
 
-          The SHA-256 checksum is attached next to the jar.
+          SHA-256 checksums are attached next to the jars.
           NOTES
 
           {
-            echo "release_jar=$release_jar"
-            echo "checksum=${release_jar}.sha256"
             echo "notes=dist/RELEASE_NOTES.md"
           } >> "$GITHUB_OUTPUT"
 
@@ -110,16 +107,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ steps.version.outputs.tag_name }}
           PROJECT_VERSION: ${{ steps.version.outputs.project_version }}
-          RELEASE_JAR: ${{ steps.artifact.outputs.release_jar }}
-          CHECKSUM: ${{ steps.artifact.outputs.checksum }}
           NOTES: ${{ steps.artifact.outputs.notes }}
         run: |
           if gh release view "$TAG_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$TAG_NAME" "$RELEASE_JAR" "$CHECKSUM" \
+            gh release upload "$TAG_NAME" dist/*.jar dist/*.sha256 \
               --repo "$GITHUB_REPOSITORY" \
               --clobber
           else
-            gh release create "$TAG_NAME" "$RELEASE_JAR" "$CHECKSUM" \
+            gh release create "$TAG_NAME" dist/*.jar dist/*.sha256 \
               --repo "$GITHUB_REPOSITORY" \
               --target "$GITHUB_SHA" \
               --title "dire-neo4j ${PROJECT_VERSION}" \

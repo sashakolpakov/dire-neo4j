@@ -22,6 +22,20 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class DiReProceduresTest {
     @Test
+    void parsesSpectralConvergenceControls() {
+        DiReConfig config = DiReConfig.parse(Map.of(
+                "nodeQuery", "MATCH (n) RETURN id(n) AS id",
+                "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target",
+                "spectralTolerance", 0.001,
+                "spectralMinIterations", 12,
+                "spectralMaxIterations", 80));
+
+        assertEquals(0.001f, config.layoutConfig.spectralTolerance());
+        assertEquals(12, config.layoutConfig.spectralMinIterations());
+        assertEquals(80, config.layoutConfig.spectralMaxIterations());
+    }
+
+    @Test
     void streamReturnsCoordinates() {
         try (Neo4j neo4j = database()) {
             GraphDatabaseService db = neo4j.defaultDatabaseService();

@@ -105,7 +105,13 @@ public final class DiReLayout {
             SpectralInitializer.normalize(positions, n, dimensions);
             return positions;
         }
-        return SpectralInitializer.initialize(graph, dimensions, config.randomSeed());
+        return SpectralInitializer.initialize(
+                graph,
+                dimensions,
+                config.randomSeed(),
+                config.spectralTolerance(),
+                config.spectralMinIterations(),
+                config.spectralMaxIterations());
     }
 
     private static void accumulateAttraction(

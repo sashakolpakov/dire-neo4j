@@ -83,6 +83,9 @@ final class DiReConfig {
                 .negativeSamples(integer(config, "negativeSamples", 16))
                 .concurrency(integer(config, "concurrency", LayoutConfig.defaultConcurrency()))
                 .fastKernel(bool(config, "fastKernel", false))
+                .spectralTolerance(floatValue(config, "spectralTolerance", 0.0f))
+                .spectralMinIterations(integer(config, "spectralMinIterations", 8))
+                .spectralMaxIterations(integer(config, "spectralMaxIterations", 160))
                 .build();
 
         return new DiReConfig(
