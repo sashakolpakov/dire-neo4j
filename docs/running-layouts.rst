@@ -26,6 +26,8 @@ It may also return:
    RETURN coalesce(r.weight, 1.0) AS weight
 
 All relationship endpoints must be included by ``nodeQuery``.
+Numeric ``id(...)`` values and string ``elementId(...)`` values are both
+supported when the node and relationship queries use the same identity type.
 
 Write Coordinates
 -----------------
@@ -47,7 +49,8 @@ Write Coordinates
      writeInitialProperties: ['dire_initial_x', 'dire_initial_y'],
      iterations: 200,
      randomSeed: 42,
-     concurrency: 8
+     concurrency: 8,
+     writeBatchSize: 10000
    })
    YIELD nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength
    RETURN nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength;
@@ -59,6 +62,19 @@ The output properties are normal Neo4j node properties:
    MATCH (n:Paper)
    RETURN n.name, n.dire_x, n.dire_y
    LIMIT 10;
+
+Omit ``writeBatchSize`` to keep all writes in the caller transaction. When it
+is set, each chunk commits independently; use this for large committed
+projections only, because partial results remain if a later batch fails.
+
+By default, spectral initialization preserves the historical fixed 160
+power-iteration behavior. Set ``spectralTolerance`` above zero to enable
+deterministic convergence checks. ``spectralMinIterations`` defaults to ``8``,
+and ``spectralMaxIterations`` defaults to ``160``.
+
+``fastKernel`` remains opt-in. It uses a dyadic exponent approximation for the
+force law and can slightly perturb coordinates relative to the default exact
+scalar path.
 
 Wide Variant
 ------------
@@ -147,3 +163,11 @@ Estimate Memory
    })
    YIELD nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax
    RETURN nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax;
+
+Benchmarking
+------------
+
+The repository keeps only a small benchmark smoke in normal CI. The broader
+fast-kernel matrix is available through the manual helper script
+``scripts/run-fast-kernel-benchmarks.sh`` and the separate manual workflow
+``.github/workflows/fast-kernel-benchmarks.yml``.

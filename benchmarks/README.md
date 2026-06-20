@@ -1,8 +1,8 @@
 # Benchmarks
 
 This module contains JMH benchmarks for the pure Java `dire-neo4j-core`
-layout engine. It intentionally does not depend on Neo4j; database projection
-and write-throughput benchmarks should live in a later benchmark slice.
+layout engine. Neo4j projection, write-throughput, stream, and peak-heap
+benchmarks live in the sibling `neo4j-benchmarks/` module.
 
 ## Build
 
@@ -34,7 +34,9 @@ java -jar benchmarks/target/benchmarks.jar CoreLayoutBenchmark \
   -p nodeCount=1000 \
   -p longRangeEdgesPerNode=1 \
   -p iterations=3 \
-  -p concurrency=1
+  -p concurrency=1 \
+  -p spectralTolerance=0.0 \
+  -p fastKernel=false
 ```
 
 The benchmark methods cover:
@@ -43,6 +45,50 @@ The benchmark methods cover:
 - `spectralInitialization`: `DiReLayout.run` with spectral init and `iterations=0`.
 - `randomInitLayout`: layout iterations with random initialization, useful for kernel timing.
 - `fullSpectralLayout`: spectral initialization plus layout iterations.
+
+Compare fixed and convergence-checked spectral initialization by running
+`spectralInitialization` with `-p spectralTolerance=0.0` and a positive value
+such as `-p spectralTolerance=0.0001`.
+
+Compare exact and approximate force-law paths by varying `-p fastKernel=false`
+and `-p fastKernel=true`.
+
+The benchmark also accepts `-p minDist=...` and `-p spread=...` so you can
+measure different fitted exponent regimes instead of only the default shape.
+
+## Fast Kernel Matrix
+
+For an exact-versus-fast matrix with coordinate drift and stress deltas, build
+the shaded jar and run:
+
+```bash
+java -cp benchmarks/target/benchmarks.jar org.dire.neo4j.core.FastKernelMatrix
+```
+
+To run the full manual suite used for the recorded fast-kernel results:
+
+```bash
+scripts/run-fast-kernel-benchmarks.sh
+```
+
+That script writes the matrix CSV and three representative JMH slice outputs to
+`benchmarks/fast-kernel-output/` by default.
+
+There is also a separate manual GitHub Actions workflow,
+`.github/workflows/fast-kernel-benchmarks.yml`, exposed through
+`workflow_dispatch`. It is intentionally not part of normal CI.
+
+The output is CSV with:
+
+- graph size and density inputs
+- `minDist` / `spread`
+- fitted exponent `b`
+- fast-path dyadic approximation exponent
+- exact and fast wall-clock milliseconds
+- speedup percentage
+- initial/final RMS drift
+- max final-coordinate drift
+- exact/fast stress and stress delta percentage
 
 ## Local Scale Runs
 

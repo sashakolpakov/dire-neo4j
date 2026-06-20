@@ -11,6 +11,7 @@ import org.neo4j.harness.Neo4jBuilders;
 import javax.ws.rs.core.Response;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -19,7 +20,21 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class DireProceduresTest {
+class DiReProceduresTest {
+    @Test
+    void parsesSpectralConvergenceControls() {
+        DiReConfig config = DiReConfig.parse(Map.of(
+                "nodeQuery", "MATCH (n) RETURN id(n) AS id",
+                "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target",
+                "spectralTolerance", 0.001,
+                "spectralMinIterations", 12,
+                "spectralMaxIterations", 80));
+
+        assertEquals(0.001f, config.layoutConfig.spectralTolerance());
+        assertEquals(12, config.layoutConfig.spectralMinIterations());
+        assertEquals(80, config.layoutConfig.spectralMaxIterations());
+    }
+
     @Test
     void streamReturnsCoordinates() {
         try (Neo4j neo4j = database()) {
@@ -135,6 +150,120 @@ class DireProceduresTest {
                 tx.commit();
             }
         }
+    }
+
+    @Test
+    void batchedWritePersistsFinalAndInitialCoordinates() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                Result result = tx.execute("""
+                        CALL dire.layout.write({
+                          nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id ORDER BY id(n)',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN id(a) AS source, id(b) AS target',
+                          writeProperties: ['batch_x', 'batch_y'],
+                          writeInitialProperties: ['batch_initial_x', 'batch_initial_y'],
+                          writeBatchSize: 3,
+                          iterations: 1
+                        })
+                        YIELD nodesWritten
+                        RETURN nodesWritten
+                        """);
+                assertEquals(4L, result.next().get("nodesWritten"));
+                tx.commit();
+            }
+
+            try (Transaction tx = db.beginTx()) {
+                Map<String, Object> row = tx.execute("""
+                        MATCH (n:Paper)
+                        RETURN count(n.batch_x) AS xs,
+                               count(n.batch_y) AS ys,
+                               count(n.batch_initial_x) AS initialXs,
+                               count(n.batch_initial_y) AS initialYs
+                        """).next();
+                assertEquals(4L, row.get("xs"));
+                assertEquals(4L, row.get("ys"));
+                assertEquals(4L, row.get("initialXs"));
+                assertEquals(4L, row.get("initialYs"));
+                tx.commit();
+            }
+        }
+    }
+
+    @Test
+    void defaultWriteRollsBackWithCallerWhileBatchedWriteDoesNot() {
+        try (Neo4j neo4j = database()) {
+            GraphDatabaseService db = neo4j.defaultDatabaseService();
+            seedGraph(db);
+
+            try (Transaction tx = db.beginTx()) {
+                tx.execute("""
+                        CALL dire.layout.write({
+                          nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN id(a) AS source, id(b) AS target',
+                          writeProperties: ['atomic_x', 'atomic_y'],
+                          writeInitialProperties: [],
+                          iterations: 0
+                        })
+                        YIELD nodesWritten
+                        RETURN nodesWritten
+                        """).next();
+            }
+            assertEquals(0L, countNodesWithProperty(db, "atomic_x"));
+
+            try (Transaction tx = db.beginTx()) {
+                tx.execute("""
+                        CALL dire.layout.write({
+                          nodeQuery: 'MATCH (n:Paper) RETURN id(n) AS id',
+                          relationshipQuery: 'MATCH (a:Paper)-[:CITES]->(b:Paper) RETURN id(a) AS source, id(b) AS target',
+                          writeProperties: ['non_atomic_x', 'non_atomic_y'],
+                          writeInitialProperties: [],
+                          writeBatchSize: 2,
+                          iterations: 0
+                        })
+                        YIELD nodesWritten
+                        RETURN nodesWritten
+                        """).next();
+            }
+            assertEquals(4L, countNodesWithProperty(db, "non_atomic_x"));
+        }
+    }
+
+    @Test
+    void batchedWriteUsesStableBoundariesAndStopsAfterFailure() {
+        List<String> ranges = new java.util.ArrayList<>();
+
+        int written = DiReProcedures.writeBatches(7, 3, (start, end) -> ranges.add(start + ":" + end));
+
+        assertEquals(7, written);
+        assertEquals(List.of("0:3", "3:6", "6:7"), ranges);
+
+        AtomicInteger calls = new AtomicInteger();
+        RuntimeException failure = assertThrows(RuntimeException.class, () ->
+                DiReProcedures.writeBatches(7, 3, (start, end) -> {
+                    if (calls.incrementAndGet() == 2) {
+                        throw new IllegalStateException("batch failed");
+                    }
+                }));
+        assertEquals("batch failed", failure.getMessage());
+        assertEquals(2, calls.get());
+    }
+
+    @Test
+    void writeBatchSizeIsOptionalAndMustBePositive() {
+        Map<String, Object> required = Map.of(
+                "nodeQuery", "MATCH (n) RETURN id(n) AS id",
+                "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target");
+
+        assertNull(DiReConfig.parse(required).writeBatchSize);
+
+        Map<String, Object> zero = new java.util.HashMap<>(required);
+        zero.put("writeBatchSize", 0);
+        IllegalArgumentException error =
+                assertThrows(IllegalArgumentException.class, () -> DiReConfig.parse(zero));
+        assertTrue(error.getMessage().contains("writeBatchSize"));
     }
 
     @Test
@@ -330,10 +459,10 @@ class DireProceduresTest {
 
     @Test
     void fastKernelConfigDefaultsFalseAndParsesTrue() {
-        DireConfig defaults = DireConfig.parse(Map.of(
+        DiReConfig defaults = DiReConfig.parse(Map.of(
                 "nodeQuery", "MATCH (n) RETURN id(n) AS id",
                 "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target"));
-        DireConfig enabled = DireConfig.parse(Map.of(
+        DiReConfig enabled = DiReConfig.parse(Map.of(
                 "nodeQuery", "MATCH (n) RETURN id(n) AS id",
                 "relationshipQuery", "MATCH (a)-->(b) RETURN id(a) AS source, id(b) AS target",
                 "fastKernel", true));
@@ -442,8 +571,10 @@ class DireProceduresTest {
             GraphDatabaseService db = neo4j.defaultDatabaseService();
             seedViewerGraph(db);
 
-            DireViewResource resource = new DireViewResource();
+            DiReViewResource resource = new DiReViewResource();
             resource.db = db;
+            long nodesBefore = countAllNodes(db);
+            long relationshipsBefore = countAllRelationships(db);
             Response response = resource.defaultData();
             String body = (String) response.getEntity();
 
@@ -452,6 +583,8 @@ class DireProceduresTest {
             assertTrue(body.contains("\"totalEdges\":1"));
             assertTrue(body.contains("\"dire\""));
             assertTrue(body.contains("\"nodeQuery\""));
+            assertEquals(nodesBefore, countAllNodes(db));
+            assertEquals(relationshipsBefore, countAllRelationships(db));
         }
     }
 
@@ -461,7 +594,7 @@ class DireProceduresTest {
             GraphDatabaseService db = neo4j.defaultDatabaseService();
             seedViewerGraph(db);
 
-            DireViewResource resource = new DireViewResource();
+            DiReViewResource resource = new DiReViewResource();
             resource.db = db;
             Response response = resource.query(
                     "CREATE (:Pwned) RETURN 1 AS idx",
@@ -476,7 +609,7 @@ class DireProceduresTest {
 
     @Test
     void unmanagedViewerServesScriptPayload() {
-        DireViewResource resource = new DireViewResource();
+        DiReViewResource resource = new DiReViewResource();
         Response response = resource.script();
         String body = (String) response.getEntity();
 
@@ -488,7 +621,7 @@ class DireProceduresTest {
         return Neo4jBuilders.newInProcessBuilder()
                 .withDisabledServer()
                 .withConfig(BoltConnector.enabled, false)
-                .withProcedure(DireProcedures.class)
+                .withProcedure(DiReProcedures.class)
                 .build();
     }
 
@@ -556,6 +689,33 @@ class DireProceduresTest {
         try (Transaction tx = db.beginTx()) {
             Result result = tx.execute("MATCH (n:Pwned) RETURN count(n) AS count");
             long count = ((Number) result.next().get("count")).longValue();
+            tx.commit();
+            return count;
+        }
+    }
+
+    private static long countNodesWithProperty(GraphDatabaseService db, String property) {
+        try (Transaction tx = db.beginTx()) {
+            Result result = tx.execute(
+                    "MATCH (n:Paper) WHERE n[$property] IS NOT NULL RETURN count(n) AS count",
+                    Map.of("property", property));
+            long count = ((Number) result.next().get("count")).longValue();
+            tx.commit();
+            return count;
+        }
+    }
+
+    private static long countAllNodes(GraphDatabaseService db) {
+        return count(db, "MATCH (n) RETURN count(n) AS count");
+    }
+
+    private static long countAllRelationships(GraphDatabaseService db) {
+        return count(db, "MATCH ()-[r]->() RETURN count(r) AS count");
+    }
+
+    private static long count(GraphDatabaseService db, String query) {
+        try (Transaction tx = db.beginTx()) {
+            long count = ((Number) tx.execute(query).next().get("count")).longValue();
             tx.commit();
             return count;
         }

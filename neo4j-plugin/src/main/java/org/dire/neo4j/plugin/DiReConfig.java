@@ -9,7 +9,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
-final class DireConfig {
+final class DiReConfig {
     final String nodeQuery;
     final String relationshipQuery;
     final Map<String, Object> parameters;
@@ -19,8 +19,9 @@ final class DireConfig {
     final LayoutConfig layoutConfig;
     final Long maxProjectionBytes;
     final boolean includeEmbedding;
+    final Integer writeBatchSize;
 
-    private DireConfig(
+    private DiReConfig(
             String nodeQuery,
             String relationshipQuery,
             Map<String, Object> parameters,
@@ -29,7 +30,8 @@ final class DireConfig {
             List<String> warmStartProperties,
             LayoutConfig layoutConfig,
             Long maxProjectionBytes,
-            boolean includeEmbedding) {
+            boolean includeEmbedding,
+            Integer writeBatchSize) {
         this.nodeQuery = nodeQuery;
         this.relationshipQuery = relationshipQuery;
         this.parameters = parameters;
@@ -39,9 +41,10 @@ final class DireConfig {
         this.layoutConfig = layoutConfig;
         this.maxProjectionBytes = maxProjectionBytes;
         this.includeEmbedding = includeEmbedding;
+        this.writeBatchSize = writeBatchSize;
     }
 
-    static DireConfig parse(Map<String, Object> config) {
+    static DiReConfig parse(Map<String, Object> config) {
         if (config == null) {
             throw new IllegalArgumentException("config is required");
         }
@@ -80,9 +83,12 @@ final class DireConfig {
                 .negativeSamples(integer(config, "negativeSamples", 16))
                 .concurrency(integer(config, "concurrency", LayoutConfig.defaultConcurrency()))
                 .fastKernel(bool(config, "fastKernel", false))
+                .spectralTolerance(floatValue(config, "spectralTolerance", 0.0f))
+                .spectralMinIterations(integer(config, "spectralMinIterations", 8))
+                .spectralMaxIterations(integer(config, "spectralMaxIterations", 160))
                 .build();
 
-        return new DireConfig(
+        return new DiReConfig(
                 nodeQuery,
                 relationshipQuery,
                 parameters(config),
@@ -91,7 +97,8 @@ final class DireConfig {
                 warmStartProperties,
                 layoutConfig,
                 positiveOptionalLong(config, "maxProjectionBytes"),
-                bool(config, "includeEmbedding", false));
+                bool(config, "includeEmbedding", false),
+                positiveOptionalInteger(config, "writeBatchSize"));
     }
 
     static EstimateInput parseEstimate(Map<String, Object> config) {
@@ -189,6 +196,17 @@ final class DireConfig {
             throw new IllegalArgumentException(key + " must be positive");
         }
         return value;
+    }
+
+    private static Integer positiveOptionalInteger(Map<String, Object> config, String key) {
+        Long value = optionalLong(config, key);
+        if (value == null) {
+            return null;
+        }
+        if (value <= 0L || value > Integer.MAX_VALUE) {
+            throw new IllegalArgumentException(key + " must be between 1 and " + Integer.MAX_VALUE);
+        }
+        return value.intValue();
     }
 
     private static float floatValue(Map<String, Object> config, String key, float defaultValue) {

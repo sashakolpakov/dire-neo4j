@@ -3,12 +3,18 @@ package org.dire.neo4j.core;
 import java.util.Arrays;
 
 final class SpectralInitializer {
-    private static final int POWER_ITERATIONS = 160;
+    private static final int CONVERGENCE_CHECK_INTERVAL = 8;
 
     private SpectralInitializer() {
     }
 
-    static float[] initialize(CsrGraph graph, int dimensions, long seed) {
+    static float[] initialize(
+            CsrGraph graph,
+            int dimensions,
+            long seed,
+            float tolerance,
+            int minIterations,
+            int maxIterations) {
         int n = graph.nodeCount();
         float[] positions = new float[n * dimensions];
         if (n == 1) {
@@ -21,13 +27,23 @@ final class SpectralInitializer {
         orthonormalize(q, n, columns);
 
         float[] y = new float[n * columns];
-        for (int iter = 0; iter < POWER_ITERATIONS; iter++) {
+        for (int iter = 0; iter < maxIterations; iter++) {
             Arrays.fill(y, 0.0f);
             multiplyNormalizedAdjacency(graph, degree, q, y, columns);
             orthonormalize(y, n, columns);
+            int completedIterations = iter + 1;
+            boolean checkConvergence = completedIterations == minIterations
+                    || (completedIterations > minIterations
+                        && (completedIterations - minIterations) % CONVERGENCE_CHECK_INTERVAL == 0);
+            boolean converged = tolerance > 0.0f
+                    && checkConvergence
+                    && subspaceDistance(q, y, n, columns) <= tolerance;
             float[] swap = q;
             q = y;
             y = swap;
+            if (converged) {
+                break;
+            }
         }
 
         double[][] rayleigh = rayleigh(graph, degree, q, n, columns);
@@ -47,6 +63,21 @@ final class SpectralInitializer {
         separateComponents(graph, positions, dimensions);
         normalize(positions, n, dimensions);
         return positions;
+    }
+
+    private static double subspaceDistance(float[] previous, float[] next, int rows, int columns) {
+        double overlapSquared = 0.0;
+        for (int a = 0; a < columns; a++) {
+            for (int b = 0; b < columns; b++) {
+                double dot = 0.0;
+                for (int row = 0; row < rows; row++) {
+                    dot += previous[row * columns + a] * next[row * columns + b];
+                }
+                overlapSquared += dot * dot;
+            }
+        }
+        double residual = Math.max(0.0, columns - overlapSquared);
+        return Math.sqrt(residual / columns);
     }
 
     static void normalize(float[] positions, int nodeCount, int dimensions) {

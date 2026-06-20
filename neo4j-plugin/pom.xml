@@ -26,9 +26,11 @@
             <scope>provided</scope>
         </dependency>
         <dependency>
+            <!-- Neo4j 5.26 and 2026.05 use JAX-RS 2.x. The Jakarta-owned
+                 2.1 artifact intentionally exports javax.ws.rs packages. -->
             <groupId>jakarta.ws.rs</groupId>
             <artifactId>jakarta.ws.rs-api</artifactId>
-            <version>2.1.6</version>
+            <version>${jaxrs.version}</version>
             <scope>provided</scope>
         </dependency>
         <dependency>

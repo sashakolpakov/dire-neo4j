@@ -1,0 +1,35 @@
+name: Fast Kernel Benchmarks
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fast-kernel-benchmarks:
+    name: Manual fast kernel benchmark suite
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build benchmarks
+        run: mvn -B -ntp -pl benchmarks -am package -DskipTests
+
+      - name: Run fast kernel benchmark suite
+        run: scripts/run-fast-kernel-benchmarks.sh benchmark-artifacts
+
+      - name: Upload benchmark artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: fast-kernel-benchmarks
+          if-no-files-found: error
+          path: benchmark-artifacts/

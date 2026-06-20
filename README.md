@@ -4,15 +4,23 @@ Neo4j server plugin for DiRe graph layouts.
 
 `dire-neo4j` projects a graph from Cypher, builds a primitive-array CSR
 adjacency, computes a spectral initialization, runs DiRe attraction/repulsion
-kernels, and writes layout coordinates back to Neo4j nodes. It also ships a
-small unmanaged `/dire/` viewer served by the same Neo4j server.
+kernels, and writes layout coordinates back to Neo4j nodes. The same plugin jar
+also serves the built-in `/dire/` viewer from the Neo4j server.
 
-The intended workflow is:
+The plugin is implemented and release-packaged for two Neo4j lines:
 
-1. Load or keep your dataset in a normal Neo4j database.
-2. Choose the node and relationship projection with Cypher.
-3. Run `dire.layout.write`.
-4. Open `/dire/` to inspect the stored coordinates.
+- Neo4j `5.26.27`
+- Neo4j `2026.05.0`
+
+Use the jar that matches the Neo4j server line exactly.
+
+Typical workflow:
+
+1. Install the plugin jar into Neo4j.
+2. Enable the `dire.*` procedures and the `/dire/` unmanaged extension.
+3. Load or keep your graph in Neo4j.
+4. Run `CALL dire.layout.write(...)`.
+5. Open `/dire/` to inspect the stored coordinates.
 
 ## Repository Layout
 
@@ -20,7 +28,8 @@ The intended workflow is:
 java-core/      primitive-array layout engine
 neo4j-plugin/   Neo4j procedures and /dire/ viewer
 examples/       dataset loaders and runnable examples
-benchmarks/     benchmark harness placeholder
+benchmarks/     pure Java core JMH benchmarks
+neo4j-benchmarks/ Neo4j-backed projection/write/heap JMH benchmarks
 docs/           Sphinx docs and usage notes
 ```
 
@@ -31,8 +40,11 @@ Download the release jar for your Neo4j line from
 Release assets are named with both the plugin and Neo4j versions, for example:
 
 ```text
-dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar
+dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar
 ```
+
+Release builds cover Neo4j 5.26.27 and 2026.05.0. Use the artifact whose
+Neo4j version matches the server line exactly.
 
 Use this with a self-managed Neo4j server that allows custom server plugins.
 Managed Neo4j services such as Aura do not allow installing arbitrary plugin
@@ -46,23 +58,37 @@ Java 21 is recommended for current Neo4j releases.
 export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-mvn test
-mvn package
+mvn -Pneo4j-5.26 test
+mvn -Pneo4j-5.26 package
+
+# Or build against Neo4j 2026.05:
+mvn -Pneo4j-2026.05 package
 ```
 
-The local server plugin jar is written to:
+The local plugin jar is written to:
 
 ```text
 neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar
 ```
 
-## Install Into A Normal Neo4j Server
+## Install Into Neo4j
 
-Stop Neo4j, copy the jar into the server plugin directory, configure Neo4j, and
-restart.
+This plugin only works on self-managed Neo4j servers that allow custom plugin
+jars. Aura and other managed offerings do not expose the server `plugins`
+directory.
+
+Stop Neo4j, copy the jar into the active Neo4j `plugins` directory, configure
+`neo4j.conf`, and restart.
 
 ```sh
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+```
+
+If you built from source instead of downloading a release, copy:
+
+```sh
+cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
+  "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 ```
 
 Add to `neo4j.conf`:
@@ -98,6 +124,48 @@ The viewer is available on the same HTTP port as Neo4j:
 http://localhost:7474/dire/
 ```
 
+## Quick Start In Neo4j
+
+Once the plugin is installed, the minimum cycle is:
+
+1. Project nodes with `nodeQuery`.
+2. Project relationships with `relationshipQuery`.
+3. Write coordinates to properties.
+4. Open `/dire/`.
+
+`nodeQuery` must return `id`. `relationshipQuery` must return `source` and
+`target`. `weight` is optional.
+
+Example:
+
+```cypher
+CALL dire.layout.write({
+  nodeQuery: '
+    MATCH (n:Paper)
+    RETURN id(n) AS id
+  ',
+  relationshipQuery: '
+    MATCH (a:Paper)-[r:CITES]->(b:Paper)
+    RETURN id(a) AS source,
+           id(b) AS target,
+           coalesce(r.weight, 1.0) AS weight
+  ',
+  writeProperties: ['dire_x', 'dire_y'],
+  writeInitialProperties: ['dire_initial_x', 'dire_initial_y'],
+  iterations: 200,
+  randomSeed: 42,
+  concurrency: 8
+})
+YIELD nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength
+RETURN nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength;
+```
+
+Then open:
+
+```text
+http://localhost:7474/dire/
+```
+
 ## Homebrew Neo4j Example
 
 ```sh
@@ -106,7 +174,7 @@ brew install openjdk@21 neo4j
 export JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
 export PATH="$JAVA_HOME/bin:$PATH"
 
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar \
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar \
   "$(brew --prefix neo4j)/libexec/plugins/dire-neo4j-plugin.jar"
 ```
 
@@ -128,16 +196,44 @@ NEO4J_CONF="$(brew --prefix neo4j)/libexec/conf" neo4j console
 docker run --rm \
   --name dire-neo4j \
   -p 7474:7474 -p 7687:7687 \
-  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar:/plugins/dire-neo4j-plugin.jar:ro" \
+  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar:/plugins/dire-neo4j-plugin.jar:ro" \
   -e NEO4J_AUTH=neo4j/password \
   -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
   -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
   -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
-  neo4j:5.26.0
+  neo4j:5.26.27
 ```
 
 The same command works with a locally built jar if you replace the mounted jar
 path with `neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar`.
+
+## Performance And Benchmarks
+
+The normal CI workflow keeps only a very small benchmark regression smoke. The
+broader fast-kernel benchmark matrix is intentionally separate so pull-request
+checks stay cheap.
+
+Core JMH benchmarks live in `benchmarks/`. Neo4j-backed projection and write
+benchmarks live in `neo4j-benchmarks/`.
+
+For the opt-in `fastKernel` path, use the manual suite:
+
+```sh
+scripts/run-fast-kernel-benchmarks.sh
+```
+
+That script writes a matrix CSV plus representative JMH slice outputs to
+`benchmarks/fast-kernel-output/`.
+
+The repository also includes a manual GitHub Actions workflow at
+`.github/workflows/fast-kernel-benchmarks.yml`. It is exposed through
+`workflow_dispatch` and is not part of normal CI.
+
+Recorded fast-kernel benchmark results are summarized in:
+
+```text
+benchmarks/FAST_KERNEL_RESULTS_2026-06-18.md
+```
 
 ## Ingest A Dataset
 
@@ -246,7 +342,8 @@ metadata, and DiRe coordinate properties for the viewer. For large samples,
 
 `dire.layout.write` reads a Cypher projection. The node query must return
 Neo4j node ids as `id`. The relationship query must return endpoint ids as
-`source` and `target`; `weight` is optional.
+`source` and `target`; `weight` is optional. `elementId(...)` strings are also
+supported if both queries use them consistently.
 
 ```cypher
 CALL dire.layout.write({
@@ -264,7 +361,9 @@ CALL dire.layout.write({
   writeInitialProperties: ['dire_initial_x', 'dire_initial_y'],
   iterations: 200,
   randomSeed: 42,
-  concurrency: 8
+  concurrency: 8,
+  spectralTolerance: 0.0001,
+  writeBatchSize: 10000
 })
 YIELD nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength
 RETURN nodesWritten, relationshipsRead, iterations, milliseconds, stress, meanEdgeLength;
@@ -274,6 +373,18 @@ The procedure writes:
 
 - `dire_x`, `dire_y`: final DiRe coordinates.
 - `dire_initial_x`, `dire_initial_y`: initialization coordinates.
+
+`writeBatchSize` is optional. Without it, all properties participate in the
+caller's transaction and roll back with that transaction. When set to a
+positive node count, writes commit in independent chunks after projection and
+layout complete. This reduces transaction size but is intentionally non-atomic:
+earlier batches remain committed if a later batch fails, and uncommitted caller
+changes are not visible to batch transactions.
+
+Spectral initialization keeps the historical fixed 160 power iterations by
+default. Set `spectralTolerance` above zero to enable deterministic
+subspace-convergence checks. `spectralMinIterations` defaults to `8`, and
+`spectralMaxIterations` defaults to `160`.
 
 ## Add A Wider Variant
 
@@ -376,6 +487,7 @@ Common layout options:
 | `dimensions` | `2` | 2D or 3D coordinates |
 | `writeProperties` | `['dire_x', 'dire_y']` | final coordinates |
 | `writeInitialProperties` | `['dire_initial_x', 'dire_initial_y']` | initialization coordinates |
+| `writeBatchSize` | unset | opt-in independent write transactions; changes atomicity |
 | `warmStartProperties` | `writeProperties` | used with `initialization: 'warm_start'` |
 | `negativeSamples` | `16` | sampled repulsion per node |
 | `concurrency` | `min(availableProcessors, 8)` | worker threads for force kernels |

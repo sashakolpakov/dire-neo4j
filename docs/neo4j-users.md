@@ -3,6 +3,9 @@
 This guide covers installing `dire-neo4j` into a Neo4j server, running DiRe on
 an existing graph, and viewing the resulting coordinates in the bundled viewer.
 
+The plugin is implemented and packaged for Neo4j `5.26.27` and `2026.05.0`.
+Use the jar that matches your Neo4j server line exactly.
+
 ## What You Install
 
 `dire-neo4j` is a Neo4j server plugin. The jar provides:
@@ -18,12 +21,11 @@ Neo4j process after the jar is installed.
 
 ## Requirements
 
-- Neo4j server with plugin support.
+- Self-managed Neo4j server with plugin support.
 - Java compatible with your Neo4j distribution. Neo4j 2026 uses Java 21.
 - Maven, if building from source.
 
-The current build targets the Neo4j Java API declared in `pom.xml` and is tested
-locally against the Homebrew Neo4j package.
+Release profiles target Neo4j 5.26.27 and 2026.05.0.
 
 Managed Neo4j services such as Aura do not allow installing arbitrary server
 plugin jars.
@@ -35,14 +37,17 @@ line from <https://github.com/sashakolpakov/dire-neo4j/releases>. Release
 assets include both versions in the filename:
 
 ```text
-dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar
+dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar
 ```
 
 To build the jar yourself, run this from the repository root:
 
 
 ```sh
-mvn package
+mvn -Pneo4j-5.26 package
+
+# Or:
+mvn -Pneo4j-2026.05 package
 ```
 
 The plugin jar is produced at:
@@ -58,7 +63,14 @@ Stop Neo4j before replacing plugins.
 Copy the jar into the Neo4j plugins directory:
 
 ```sh
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
+```
+
+For a local build, copy:
+
+```sh
+cp neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar \
+  "$NEO4J_HOME/plugins/dire-neo4j-plugin.jar"
 ```
 
 Add these settings to `neo4j.conf`:
@@ -70,46 +82,6 @@ server.unmanaged_extension_classes=org.dire.neo4j.plugin=/dire
 ```
 
 Restart Neo4j.
-
-## Homebrew Example
-
-```sh
-brew install neo4j
-
-cp dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar \
-  "$(brew --prefix neo4j)/libexec/plugins/dire-neo4j-plugin.jar"
-```
-
-Edit:
-
-```text
-$(brew --prefix neo4j)/libexec/conf/neo4j.conf
-```
-
-Then start Neo4j:
-
-```sh
-NEO4J_CONF="$(brew --prefix neo4j)/libexec/conf" neo4j console
-```
-
-## Docker Example
-
-Mount the jar into `/plugins` and pass the required Neo4j settings:
-
-```sh
-docker run --rm \
-  --name dire-neo4j \
-  -p 7474:7474 -p 7687:7687 \
-  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.0.jar:/plugins/dire-neo4j-plugin.jar:ro" \
-  -e NEO4J_AUTH=neo4j/password \
-  -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
-  -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
-  -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
-  neo4j:5.26.0
-```
-
-The same command works with a locally built jar if you replace the mounted jar
-path with `neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar`.
 
 ## Verify Installation
 
@@ -140,6 +112,46 @@ http://localhost:7474/dire/
 
 Use your configured HTTP port if it is not `7474`.
 
+## Homebrew Example
+
+```sh
+brew install neo4j
+
+cp dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar \
+  "$(brew --prefix neo4j)/libexec/plugins/dire-neo4j-plugin.jar"
+```
+
+Edit:
+
+```text
+$(brew --prefix neo4j)/libexec/conf/neo4j.conf
+```
+
+Then start Neo4j:
+
+```sh
+NEO4J_CONF="$(brew --prefix neo4j)/libexec/conf" neo4j console
+```
+
+## Docker Example
+
+Mount the jar into `/plugins` and pass the required Neo4j settings:
+
+```sh
+docker run --rm \
+  --name dire-neo4j \
+  -p 7474:7474 -p 7687:7687 \
+  -v "$PWD/dire-neo4j-plugin-0.1.0-neo4j-5.26.27.jar:/plugins/dire-neo4j-plugin.jar:ro" \
+  -e NEO4J_AUTH=neo4j/password \
+  -e 'NEO4J_dbms_security_procedures_unrestricted=dire.*' \
+  -e 'NEO4J_dbms_security_procedures_allowlist=dire.*' \
+  -e 'NEO4J_server_unmanaged__extension__classes=org.dire.neo4j.plugin=/dire' \
+  neo4j:5.26.27
+```
+
+The same command works with a locally built jar if you replace the mounted jar
+path with `neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar`.
+
 ## Run DiRe On Your Graph
 
 The layout procedure reads a graph projection from two Cypher queries:
@@ -147,6 +159,9 @@ The layout procedure reads a graph projection from two Cypher queries:
 - `nodeQuery` must return `id`.
 - `relationshipQuery` must return `source` and `target`.
 - `relationshipQuery` may also return `weight`.
+- Numeric `id(...)` values and string `elementId(...)` values are both
+  supported, but the node and relationship queries must use the same identity
+  type.
 
 Example for `(:Paper)-[:CITES]->(:Paper)`:
 
@@ -176,6 +191,15 @@ This writes:
 
 - `dire_x`, `dire_y`: final DiRe coordinates.
 - `dire_initial_x`, `dire_initial_y`: initial coordinates before refinement.
+
+By default, spectral initialization runs a fixed 160 power iterations to
+preserve the historical output. Set `spectralTolerance` above zero to enable
+deterministic convergence checks. `spectralMinIterations` defaults to `8`, and
+`spectralMaxIterations` defaults to `160`.
+
+`fastKernel` remains opt-in. It uses a dyadic exponent approximation for the
+force law and can slightly perturb coordinates relative to the default exact
+scalar path.
 
 ## Add A Wide Layout
 
@@ -295,6 +319,16 @@ CALL dire.layout.estimate({
 YIELD nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax
 RETURN nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax;
 ```
+
+## Benchmarking
+
+The repository keeps normal CI lean. The broader fast-kernel benchmark matrix
+is available separately through:
+
+- `scripts/run-fast-kernel-benchmarks.sh`
+- `.github/workflows/fast-kernel-benchmarks.yml` via manual dispatch
+
+Recorded benchmark notes live in `benchmarks/FAST_KERNEL_RESULTS_2026-06-18.md`.
 
 ## Common Problems
 

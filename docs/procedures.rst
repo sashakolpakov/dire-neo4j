@@ -15,9 +15,11 @@ Common config:
 
 * ``writeProperties``
 * ``writeInitialProperties``
+* ``writeBatchSize``
 * ``iterations``
 * ``randomSeed``
 * ``concurrency``
+* ``spectralTolerance``
 * ``relationshipMode``
 * ``negativeSamples``
 * ``attractionStrength``
@@ -71,6 +73,9 @@ Configuration Reference
    * - ``writeInitialProperties``
      - ``['dire_initial_x', 'dire_initial_y']``
      - initialization coordinates
+   * - ``writeBatchSize``
+     - unset
+     - opt-in independent write transactions; earlier batches survive later failures
    * - ``warmStartProperties``
      - ``writeProperties``
      - used with ``initialization: 'warm_start'``
@@ -85,7 +90,16 @@ Configuration Reference
      - include boxed ``embedding`` and ``initialEmbedding`` lists in stream results
    * - ``fastKernel``
      - ``false``
-     - opt-in shortcut for near-linear kernels; may slightly perturb coordinates
+     - opt-in dyadic exponent approximation for the force law; may slightly perturb coordinates
+   * - ``spectralTolerance``
+     - ``0.0``
+     - opt-in normalized subspace convergence threshold; zero keeps fixed iterations
+   * - ``spectralMinIterations``
+     - ``8``
+     - minimum spectral power iterations before convergence can stop
+   * - ``spectralMaxIterations``
+     - ``160``
+     - spectral power-iteration cap
    * - ``maxProjectionBytes``
      - unset
      - optional fail-fast projection memory cap
@@ -113,4 +127,23 @@ Projection Rules
 * ``relationshipQuery`` must return matching numeric or string ``source`` and
   ``target`` values.
 * Optional ``weight`` values must be finite and non-negative.
+* Zero-weight relationships are ignored.
 * Relationships whose endpoints are not present in ``nodeQuery`` cannot be used.
+
+Write Transaction Semantics
+---------------------------
+
+Without ``writeBatchSize``, coordinate properties participate in the caller's
+transaction and roll back with it. A positive ``writeBatchSize`` commits
+independent transactions after projection and layout. This bounds transaction
+size but is not atomic, and batch transactions cannot see uncommitted caller
+changes.
+
+Benchmarking Note
+-----------------
+
+``fastKernel`` is intentionally benchmarked through a separate manual suite,
+not as part of the normal pull-request CI path. Use the repository helper
+``scripts/run-fast-kernel-benchmarks.sh`` or the manual workflow-dispatch job
+``.github/workflows/fast-kernel-benchmarks.yml`` when you need the broader
+speedup, drift, and stress matrix.

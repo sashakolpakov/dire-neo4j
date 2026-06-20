@@ -154,10 +154,9 @@ tested without a database process.
 
 ## Improvement Plan
 
-This section reviews the implemented codebase against the three project goals
-and lays out a prioritized roadmap. It supersedes the forward-looking notes
-above where they conflict; the sections above describe intent, this section
-describes what to change next.
+This section records the implemented codebase against the three project goals
+and replaces the older forward-looking roadmap. Where the sections above still
+read as design intent, this section is the current implementation record.
 
 ### Current Progress
 
@@ -191,9 +190,49 @@ Completed implementation slices:
 - **P2.1 done:** attraction and repulsion kernels reuse per-pair delta locals
   instead of recomputing deltas for force updates. The default deterministic
   path remains covered by existing serial/parallel tests.
-- **P2.2 done:** `fastKernel` is an opt-in near-linear kernel shortcut. The
-  default path still uses the scalar `Math.pow` kernel; when explicitly enabled
-  and fitted `b` is close to `1.0`, attraction/repulsion reuse `distSq` directly.
+- **P2.2 done:** `fastKernel` is an opt-in dyadic exponent approximation path.
+  The default path still uses the scalar `Math.pow` kernel; when explicitly
+  enabled, attraction/repulsion approximate the fitted exponent `b` with a
+  low-cost dyadic rational chosen once per run.
+- **N1 done:** plugin classes renamed to the `DiRe*` convention (`DiReProcedures`,
+  `DiReConfig`, `DiReViewResource`, `DiReProceduresTest`) to match `DiReLayout`.
+  Safe rename: the unmanaged extension is registered by package
+  (`org.dire.neo4j.plugin`) and procedures by `@Procedure(name="dire.layout.*")`,
+  so neither server config nor Cypher procedure names change. The persisted
+  `:DireView` node label is data, not a code identifier, and is left unchanged.
+- **P2.5 done:** `recenter` extracted into `Recenter.apply`
+  (bit-identical, fixed reduction order) and a `RecenterBenchmark` JMH harness
+  added isolating the recenter pass from a full layout run. Measurements at
+  10k/100k nodes, 2D/3D, and concurrency 1/4 put recenter at 0.4-0.8% of
+  per-iteration layout time, so it remains serial.
+- **P3.1 done:** `DiReLayout` now uses a process-wide bounded shared executor
+  instead of creating and shutting down a fixed thread pool per run. Callers
+  can inject an externally owned `ExecutorService`; `DiReLayout` never shuts it
+  down. The no-arg constructor remains compatible.
+- **P1.3 done:** `dire.layout.write` accepts optional `writeBatchSize`.
+  Unset preserves caller-transaction atomicity; set commits independent write
+  batches and explicitly permits partial completion.
+- **P4.1b done:** `neo4j-benchmarks/` adds JMH coverage for projection, sampled
+  peak heap, write throughput, numeric/element IDs, and stream embeddings.
+  Documented commands cover 70k and manual one-million-node runs; CI has a
+  small finite-score/regression-threshold smoke gate.
+- **P4.1c done:** the broader fast-kernel benchmark matrix is documented and
+  runnable through `scripts/run-fast-kernel-benchmarks.sh` or the separate
+  manual workflow `.github/workflows/fast-kernel-benchmarks.yml`. This is
+  intentionally outside normal CI to avoid bloated PR checks.
+- **P4.2 done:** exact golden vectors pin deterministic core output, a
+  `large-tests` profile runs a 100k-node layout smoke test, and viewer tests
+  assert the built-in payload leaves node/relationship counts unchanged.
+- **P3.3 done:** Maven profiles, CI, smoke tests, and release packaging cover
+  Neo4j 5.26.27 and 2026.05.0. Both lines use JAX-RS 2.x: the
+  `jakarta.ws.rs-api:2.1.6` artifact intentionally exports `javax.ws.rs`, which
+  matches the unmanaged-extension imports. The Neo4j 2026 profile aligns tests
+  with JUnit Platform 6.
+- **P2.4 done:** spectral initialization accepts opt-in
+  `spectralTolerance`, `spectralMinIterations`, and `spectralMaxIterations`.
+  Zero tolerance preserves the historical fixed 160 iterations and golden
+  vectors; positive tolerance uses a deterministic normalized subspace-distance
+  check after the configured floor.
 
 Current verification:
 
@@ -207,15 +246,25 @@ java -jar benchmarks/target/benchmarks.jar CoreLayoutBenchmark -wi 1 -i 1 -f 1 \
 Next implementation decision:
 
 ```text
-P2.5 -> P3.1 -> P2.4 -> P2.3
+S1 complete: P2.5 -> P3.1
+S2 complete: P1.3 -> P4.1b -> P4.2
+S3 complete: P3.3 -> P2.4
+S4 dropped: vector-kernel and GDS integration work removed from this roadmap
 ```
 
 Rationale:
 
-- **P2.5** should only proceed if benchmark/profiler data shows `recenter` is
-  material; deterministic reduction order is mandatory.
-- **P3.1** becomes more important after kernel cleanup because every layout run
-  still creates a fresh fixed thread pool.
+- **P2.5** profiling showed `recenter` is immaterial, so the deterministic
+  serial reduction remains.
+- **P3.1** removed per-run fixed thread-pool creation in favor of shared or
+  injected executor ownership.
+- **P1.3/P4.1b/P4.2** should follow before deeper kernel changes because write
+  batching and peak-heap benchmarks determine whether memory-at-scale is
+  actually fixed.
+- **P3.3** now makes the supported Neo4j lines and JAX-RS 2.x namespace
+  explicit in build, CI, smoke, and release paths.
+- **P2.4** is opt-in, so default output remains bit-exact while callers can
+  trade spectral initialization work for a measured convergence threshold.
 
 ### Conformance Verdict
 
@@ -223,12 +272,11 @@ Rationale:
 Goal                                  Verdict   Core reason
 ------------------------------------  --------  ----------------------------------------
 Idiomatic, easy-to-install plugin     Partial   Viewer arbitrary Cypher is locked down
-                                                 and elementId is supported; no GDS
-                                                 catalog integration yet.
+                                                 and versioned artifacts cover both
+                                                 supported Neo4j lines.
 Uses kernels to speed up computation  Partial   Kernels are scalar double math with
-                                                 Math.pow/sqrt/exp per sample, delta vector
-                                                 computed twice per edge, no SIMD, fixed
-                                                 160 spectral iterations. ~2-4x headroom.
+                                                 Math.pow/sqrt/exp per sample; spectral
+                                                 convergence is now opt-in.
 Memory-sparing at scale               Partial   Core CSR/transient loader copies and
                                                  stream materialization are reduced;
                                                  write tx batching, elementId overhead,
@@ -281,13 +329,13 @@ regenerated golden vectors.
   internal builder overload that accepts backing arrays plus logical lengths,
   reuses the direct two-pass CSR path, and preserves adjacency order. This
   unlocks P1.4 without copying loader buffers through `toArray()`.
-- **P1.2 Done - stream results lazily.** `DireProcedures.stream` now returns a
+- **P1.2 Done - stream results lazily.** `DiReProcedures.stream` now returns a
   lazy stream and gates redundant `embedding`/`initialEmbedding` list allocation
   behind `includeEmbedding: true`.
-- **P1.3 Batch the write transaction.** `dire.layout.write` writes every node in
-  the caller's single transaction. Add a configurable `writeBatchSize` and
-  commit in chunks. Effort M. Batched commits change atomicity (opt-in /
-  documented).
+- **P1.3 done - batch the write transaction.** `dire.layout.write` defaults to
+  the caller's single transaction. A positive `writeBatchSize` commits
+  independent chunks after projection/layout. Earlier batches survive later
+  failures; uncommitted caller changes are not visible to batch transactions.
 - **P1.4 Done - reduce loader copies.** `GraphProjectionLoader` now hands
   `PrimitiveLongList`/`PrimitiveFloatList` backing arrays + sizes directly to a
   length-aware CSR builder entry point instead of `toArray()`. Combined with
@@ -302,40 +350,63 @@ regenerated golden vectors.
 - **P2.1 Done - fuse the double delta pass.** `accumulate*Range` now computes
   per-pair delta locals once, reuses them for distance and force updates, and
   keeps the default deterministic path covered by serial/parallel tests.
-- **P2.2 Done - special-case `b ~= 1`.** `fastKernel` defaults to false. When
-  explicitly enabled and the fitted exponent is close to `1.0`, attraction and
-  repulsion use `distSq` directly instead of `Math.pow(distSq, b)`, with branch
-  selection outside hot loops.
-- **P2.3 Vectorize the repulsion kernel** (`jdk.incubator.vector`) over its
-  uniform O(n * negativeSamples) structure. Effort L, high risk: incubator API
-  + reordered float reductions break bit-exactness. Ship as opt-in
-  `kernelMode: 'vector'`; scalar stays the deterministic default. Do *after*
-  P4.1 so it is measured.
-- **P2.4 Convergence-checked spectral iterations.** `SpectralInitializer` runs a
-  fixed 160 power iterations; add a Rayleigh/subspace-angle convergence check
-  with a floor and the 160 cap. Effort M. Changes results - gate behind
-  `spectralTolerance` (default = current fixed behavior).
-- **P2.5 Parallelize `recenter`** (currently serial every iteration, O(n*d)).
-  Only if profiling justifies; a parallel double mean must use a deterministic
-  reduction order. Effort S-M. Likely leave serial.
+- **P2.2 Done - dyadic approximation path.** `fastKernel` defaults to false.
+  When explicitly enabled, the fitted exponent is approximated once per run by
+  a low-cost dyadic rational `m / 2^n`, and attraction/repulsion replace
+  `Math.pow(distSq, b)` with repeated square roots plus integer powering inside
+  the hot loops.
+- **P2.4 done - convergence-checked spectral iterations.**
+  `spectralTolerance=0.0` preserves the fixed 160-iteration path.
+  Positive tolerance enables a deterministic normalized subspace-distance
+  check after `spectralMinIterations` (default 8), bounded by
+  `spectralMaxIterations` (default 160). Checks run at the floor and every
+  eight iterations afterward. A 1k-node JMH smoke measured 6.59 ms/op fixed,
+  6.69 ms/op with a strict `0.0001` tolerance that reached the cap, and
+  4.07 ms/op with tolerance `1.0` stopping at the floor. The loose run changed
+  normalized coordinates substantially, so tolerance remains an explicit
+  quality/runtime control rather than a new default.
+- **P2.5 done - profile `recenter`** (serial every iteration, O(n*d)).
+  `recenter` was extracted to `Recenter.apply` and measured with a dedicated
+  JMH harness. A parallel double mean would require deterministic reduction,
+  but profiling did not justify that complexity.
+  Isolated recenter pass (AverageTime, JDK default, 1 fork):
+
+  ```text
+  nodeCount  dims  recenter us/op
+  10000      2     19.3 ± 2.8
+  10000      3     32.2 ± 13.4
+  100000     2     197.6 ± 52.8
+  100000     3     332.0 ± 82.0
+  ```
+
+  Matching full-layout measurements (20 iterations) produced:
+
+  ```text
+  nodes   dims  conc  recenter us  layout us  recenter/iteration
+  10000   2     1     18.456       89738.986  0.41%
+  10000   3     1     27.601      106803.038  0.52%
+  10000   2     4     18.456       65714.724  0.56%
+  10000   3     4     27.601       80268.458  0.69%
+  100000  2     1    213.401      914346.156  0.47%
+  100000  3     1    320.378     1075925.834  0.60%
+  100000  2     4    213.401      641562.042  0.67%
+  100000  3     4    320.378      819989.813  0.78%
+  ```
+
+  Verdict: below per-iteration noise; keep the deterministic serial reduction.
 
 ### P3 - Integration / packaging / threading
 
-- **P3.1 Stop creating a thread pool per `run()`.** `DiReLayout` calls
-  `Executors.newFixedThreadPool` per invocation. Inject Neo4j's `JobScheduler`
-  or a shared bounded pool. Effort M. Keep a no-arg constructor for
-  compatibility; preserve source-range partitioning.
-- **P3.2 GDS graph-catalog projection support.** Optional second loader reading a
-  named GDS graph instead of re-running Cypher (ease + memory reuse). Effort L.
-  Ship as a separate optional artifact - GDS is a heavy `provided` dependency
-  with its own version matrix.
-- **P3.3 Neo4j version matrix + `javax`->`jakarta` fix.** POM builds against a
-  single Neo4j 5.26.0 though the README promises a jar per Neo4j line.
-  Parameterize `neo4j.version` via profiles and a CI matrix. Note:
-  `neo4j-plugin/pom.xml` declares `jakarta.ws.rs-api` but `DireViewResource`
-  imports `javax.ws.rs.*` - this only works on lines that still provide `javax`
-  and will break otherwise. Effort M. Non-breaking to users; fixes a latent
-  incompatibility.
+- **P3.1 done - stop creating a thread pool per `run()`.** `DiReLayout` uses a
+  daemon, fixed-size process-wide executor with bounded queueing and caller-runs
+  backpressure. An `ExecutorService` constructor supports host-managed
+  execution; executors remain caller-owned. The no-arg constructor and
+  source-range partitioning are preserved.
+- **P3.3 done - Neo4j version matrix + JAX-RS cleanup.** The
+  `neo4j-5.26` and `neo4j-2026.05` profiles pin 5.26.27 and 2026.05.0.
+  CI and releases build and smoke both artifacts. Both Neo4j lines still use
+  JAX-RS 2.x, whose Jakarta-owned 2.1 API artifact exports `javax.ws.rs`;
+  imports therefore remain intentionally `javax`.
 
 ### P4 - Quality / benchmarks
 
@@ -343,42 +414,40 @@ regenerated golden vectors.
   module for deterministic synthetic `java-core` benchmarks covering CSR build,
   spectral initialization through public layout APIs, random-init layout, and
   full spectral layout.
-- **P4.1b Remaining - projection/write/peak-heap benchmarks.** Add a
-  JMH module over synthetic graphs (70k and ~1M nodes) measuring projection
-  time + peak heap, per-iteration kernel time, spectral-init time, and write
-  throughput, with a no-regression check in CI. Effort M-L. **Sequence before
-  P2.3/P2.4** so kernel changes are measured, not guessed.
-- **P4.2 Large-graph + determinism regression tests.** Add a ~100k-node memory/
-  throughput smoke test, a golden-vector determinism test pinning exact
-  positions for a fixed seed/config, and a viewer read-only test. Effort M.
+- **P4.1b done - projection/write/peak-heap benchmarks.**
+  `neo4j-benchmarks/` measures projection, sampled peak-heap delta, write
+  throughput, and stream materialization over deterministic ring fixtures.
+  Parameters cover numeric/element IDs, embeddings, and batched writes.
+  Documented 70k and ~1M commands remain opt-in; CI runs bounded threshold
+  checks at 1k nodes.
+- **P4.1c done - manual fast-kernel matrix.** `FastKernelMatrix` records
+  exact-vs-fast wall time, fitted exponent regimes, drift, and stress deltas.
+  The local wrapper script and separate workflow-dispatch job keep this suite
+  available without making normal CI heavier.
+- **P4.2 done - large-graph + determinism regression tests.** A `large-tests`
+  Maven profile enables the 100k-node layout smoke test. Default tests pin exact
+  initial/final golden vectors and verify viewer reads do not change graph
+  counts.
 
 ### Suggested Sequencing
 
 ```text
-Done: P0.1 -> P0.2/P0.3 -> P4.1a -> P1.1a/P1.4a/P1.2a/P1.5a -> P2.1/P2.2
+Done: P0.1 -> P0.2/P0.3 -> P4.1a -> P1.1a/P1.4a/P1.2a/P1.5a -> P2.1/P2.2 -> N1
+Done: P2.5 (profiled; recenter remains serial) -> P3.1 (shared/injected executor)
 
-Next: P2.5 -> P3.1 -> P2.4 -> P2.3 (vector, last)
-Later: P4.1b/P4.2, P3.3, P3.2 (GDS)
+S1 Immediate: complete
+S2 Scale validation: complete
+S3 Packaging + safe algorithm controls: complete
+S4 Optional/high-risk: dropped from the project roadmap
 ```
 
 Backward-incompatible items to call out in release notes: P0.1 is already a
 security-breaking viewer change; P1.2 only if embeddings are dropped by default;
-P1.3 if batched writes change atomicity; P3.1 if `DiReLayout` construction
-changes; P3.3 for `javax`->`jakarta` on newer Neo4j lines.
+P1.3 if batched writes change atomicity. P3.1 preserved the no-arg
+`DiReLayout` construction path; P3.3 keeps the JAX-RS package namespace
+unchanged because both supported lines use JAX-RS 2.x.
 
 ### Next Task Details
 
-1. **P2.5 - Profile `recenter` before changing it.**
-   Use the JMH harness or a profiler to determine whether serial recentering is
-   material at target graph sizes. Only implement deterministic parallel
-   recentering if the profile shows it matters; reduction order must be fixed.
-
-2. **P3.1 - Shared executor / thread-pool ownership.**
-   Stop creating a fresh fixed thread pool per `DiReLayout.run()` while keeping
-   a no-arg compatibility path. Preserve source-range partitioning and current
-   deterministic reduction behavior.
-
-3. **P2.4/P2.3 - Later kernel work.**
-   Add spectral convergence gating before vector experiments. Keep vector mode
-   opt-in and last because it is most likely to perturb floating-point order and
-   depends on benchmark evidence.
+S3 is complete. S4 has been removed from the project roadmap; there is no
+planned Vector API kernel or GDS graph-catalog integration sequence.

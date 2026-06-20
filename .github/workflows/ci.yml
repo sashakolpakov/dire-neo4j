@@ -7,12 +7,9 @@ on:
   pull_request:
   workflow_dispatch:
 
-env:
-  NEO4J_VERSION: "5.26.0"
-
 jobs:
   verify:
-    name: Maven verify and Neo4j smoke test
+    name: Maven verify and benchmark regression
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,15 +26,68 @@ jobs:
           cache: maven
 
       - name: Maven verify
-        run: mvn -B -ntp verify
+        run: mvn -B -ntp -Pneo4j-5.26 verify
+
+      - name: Benchmark regression smoke
+        run: |
+          java -jar benchmarks/target/benchmarks.jar \
+            '^org.dire.neo4j.benchmarks.CoreLayoutBenchmark.randomInitLayout$' \
+            -wi 0 -i 1 -r 1s -f 1 \
+            -p nodeCount=1000 \
+            -p longRangeEdgesPerNode=1 \
+            -p iterations=3 \
+            -p concurrency=1 \
+            -rf json -rff core-benchmark.json
+          java -jar neo4j-benchmarks/target/neo4j-benchmarks.jar \
+            '^org.dire.neo4j.plugin.Neo4jScaleBenchmark.projection$' \
+            -wi 0 -i 1 -r 1s -f 1 \
+            -p nodeCount=1000 \
+            -p identityMode=numeric \
+            -p writeBatchSize=0 \
+            -p includeEmbedding=false \
+            -rf json -rff neo4j-benchmark.json
+          python3 scripts/check-jmh-regression.py \
+            benchmarks/regression-thresholds.json \
+            core-benchmark.json neo4j-benchmark.json
+
+  compatibility:
+    name: Neo4j ${{ matrix.neo4j-version }} compatibility
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: neo4j-5.26
+            neo4j-version: 5.26.27
+          - profile: neo4j-2026.05
+            neo4j-version: 2026.05.0
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: maven
+
+      - name: Build and test plugin
+        run: mvn -B -ntp -P${{ matrix.profile }} -pl neo4j-plugin -am verify
 
       - name: Smoke test installable plugin
+        env:
+          NEO4J_VERSION: ${{ matrix.neo4j-version }}
+          CONTAINER_NAME: dire-neo4j-smoke-${{ matrix.neo4j-version }}
         run: scripts/neo4j-smoke.sh
 
       - name: Upload shaded plugin jar
         uses: actions/upload-artifact@v4
         with:
-          name: dire-neo4j-plugin
+          name: dire-neo4j-plugin-neo4j-${{ matrix.neo4j-version }}
           if-no-files-found: error
           path: |
             neo4j-plugin/target/dire-neo4j-plugin-*.jar

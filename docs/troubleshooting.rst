@@ -10,6 +10,8 @@ Check:
 * Neo4j was restarted after copying the jar.
 * ``dbms.security.procedures.unrestricted=dire.*`` is set.
 * ``dbms.security.procedures.allowlist=dire.*`` is set.
+* The jar matches the Neo4j server line you are running, for example
+  ``...-neo4j-5.26.27.jar`` for Neo4j ``5.26.27``.
 
 Use:
 
@@ -73,6 +75,8 @@ Common causes:
 
 * ``nodeQuery`` does not return ``id``.
 * ``relationshipQuery`` does not return ``source`` and ``target``.
+* The node query uses ``id(...)`` while the relationship query uses
+  ``elementId(...)``, or the reverse.
 * Relationship endpoints are missing from the node projection.
 * Some weights are negative or non-finite.
 

@@ -4,6 +4,7 @@ import org.dire.neo4j.core.DiReLayout;
 import org.dire.neo4j.core.InitializationMode;
 import org.dire.neo4j.core.LayoutResult;
 import org.dire.neo4j.core.MemoryEstimate;
+import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.procedure.Context;
@@ -18,14 +19,17 @@ import java.util.Map;
 import java.util.stream.IntStream;
 import java.util.stream.Stream;
 
-public class DireProcedures {
+public class DiReProcedures {
     @Context
     public Transaction tx;
+
+    @Context
+    public GraphDatabaseService db;
 
     @Procedure(name = "dire.layout.stream", mode = Mode.READ)
     @Description("Run a DiRe graph layout and stream node coordinates without writing them.")
     public Stream<StreamResult> stream(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig config = DireConfig.parse(rawConfig);
+        DiReConfig config = DiReConfig.parse(rawConfig);
         GraphProjection projection = GraphProjectionLoader.load(tx, config, needsWarmStart(config));
         LayoutResult layout = new DiReLayout().run(projection.graph, config.layoutConfig, projection.warmStart);
         return IntStream.range(0, layout.nodeCount())
@@ -35,26 +39,18 @@ public class DireProcedures {
     @Procedure(name = "dire.layout.write", mode = Mode.WRITE)
     @Description("Run a DiRe graph layout and write coordinates back to Neo4j node properties.")
     public Stream<WriteResult> write(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig config = DireConfig.parse(rawConfig);
+        DiReConfig config = DiReConfig.parse(rawConfig);
         GraphProjection projection = GraphProjectionLoader.load(tx, config, needsWarmStart(config));
         LayoutResult layout = new DiReLayout().run(projection.graph, config.layoutConfig, projection.warmStart);
 
-        int nodesWritten = 0;
-        int dimensions = layout.dimensions();
-        for (int i = 0; i < layout.nodeCount(); i++) {
-            Node node = projection.usesElementIds()
-                    ? tx.getNodeByElementId(projection.elementId(i))
-                    : tx.getNodeById(layout.nodeId(i));
-            for (int dim = 0; dim < dimensions; dim++) {
-                node.setProperty(config.writeProperties.get(dim), (double) layout.coordinate(i, dim));
-            }
-            if (!config.writeInitialProperties.isEmpty()) {
-                for (int dim = 0; dim < dimensions; dim++) {
-                    node.setProperty(config.writeInitialProperties.get(dim), (double) layout.initialCoordinate(i, dim));
-                }
-            }
-            nodesWritten++;
-        }
+        int nodesWritten = config.writeBatchSize == null
+                ? writeRange(tx, projection, layout, config, 0, layout.nodeCount())
+                : writeBatches(layout.nodeCount(), config.writeBatchSize, (start, end) -> {
+                    try (Transaction batchTx = db.beginTx()) {
+                        writeRange(batchTx, projection, layout, config, start, end);
+                        batchTx.commit();
+                    }
+                });
 
         WriteResult result = new WriteResult();
         result.nodesWritten = nodesWritten;
@@ -66,10 +62,49 @@ public class DireProcedures {
         return Stream.of(result);
     }
 
+    static int writeBatches(int nodeCount, int batchSize, RangeWriter writer) {
+        int nodesWritten = 0;
+        for (int start = 0; start < nodeCount; start += batchSize) {
+            int end = Math.min(nodeCount, start + batchSize);
+            writer.write(start, end);
+            nodesWritten += end - start;
+        }
+        return nodesWritten;
+    }
+
+    static int writeRange(
+            Transaction writeTx,
+            GraphProjection projection,
+            LayoutResult layout,
+            DiReConfig config,
+            int start,
+            int end) {
+        int dimensions = layout.dimensions();
+        for (int i = start; i < end; i++) {
+            Node node = projection.usesElementIds()
+                    ? writeTx.getNodeByElementId(projection.elementId(i))
+                    : writeTx.getNodeById(layout.nodeId(i));
+            for (int dim = 0; dim < dimensions; dim++) {
+                node.setProperty(config.writeProperties.get(dim), (double) layout.coordinate(i, dim));
+            }
+            if (!config.writeInitialProperties.isEmpty()) {
+                for (int dim = 0; dim < dimensions; dim++) {
+                    node.setProperty(config.writeInitialProperties.get(dim), (double) layout.initialCoordinate(i, dim));
+                }
+            }
+        }
+        return end - start;
+    }
+
+    @FunctionalInterface
+    interface RangeWriter {
+        void write(int startInclusive, int endExclusive);
+    }
+
     @Procedure(name = "dire.layout.stats", mode = Mode.READ)
     @Description("Run a DiRe graph layout and return runtime and quality statistics without writing.")
     public Stream<StatsResult> stats(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig config = DireConfig.parse(rawConfig);
+        DiReConfig config = DiReConfig.parse(rawConfig);
         GraphProjection projection = GraphProjectionLoader.load(tx, config, needsWarmStart(config));
         LayoutResult layout = new DiReLayout().run(projection.graph, config.layoutConfig, projection.warmStart);
 
@@ -88,7 +123,7 @@ public class DireProcedures {
     @Procedure(name = "dire.layout.estimate", mode = Mode.READ)
     @Description("Estimate heap memory for a DiRe graph layout projection and layout run.")
     public Stream<EstimateResult> estimate(@Name("config") Map<String, Object> rawConfig) {
-        DireConfig.EstimateInput input = DireConfig.parseEstimate(rawConfig);
+        DiReConfig.EstimateInput input = DiReConfig.parseEstimate(rawConfig);
         long nodeCount = input.nodeCount() != null
                 ? input.nodeCount()
                 : countRequiredQuery(input.nodeQuery(), input.parameters(), "nodeQuery");
@@ -119,7 +154,7 @@ public class DireProcedures {
         return GraphProjectionLoader.countRows(tx, query, parameters);
     }
 
-    private static boolean needsWarmStart(DireConfig config) {
+    private static boolean needsWarmStart(DiReConfig config) {
         return config.layoutConfig.initializationMode() == InitializationMode.WARM_START;
     }
 

@@ -16,14 +16,17 @@
         <module>java-core</module>
         <module>neo4j-plugin</module>
         <module>benchmarks</module>
+        <module>neo4j-benchmarks</module>
     </modules>
 
     <properties>
         <maven.compiler.release>17</maven.compiler.release>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
-        <neo4j.version>5.26.0</neo4j.version>
+        <neo4j.version>5.26.27</neo4j.version>
+        <jaxrs.version>2.1.6</jaxrs.version>
         <junit.version>5.10.2</junit.version>
         <jmh.version>1.37</jmh.version>
+        <excludedTestGroups>large</excludedTestGroups>
     </properties>
 
     <dependencyManagement>
@@ -54,9 +57,36 @@
                     <version>3.2.5</version>
                     <configuration>
                         <useModulePath>false</useModulePath>
+                        <excludedGroups>${excludedTestGroups}</excludedGroups>
                     </configuration>
                 </plugin>
             </plugins>
         </pluginManagement>
     </build>
+
+    <profiles>
+        <profile>
+            <id>neo4j-5.26</id>
+            <activation>
+                <activeByDefault>true</activeByDefault>
+            </activation>
+            <properties>
+                <neo4j.version>5.26.27</neo4j.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>neo4j-2026.05</id>
+            <properties>
+                <neo4j.version>2026.05.0</neo4j.version>
+                <!-- Align the test engine with Neo4j 2026's JUnit Platform 6. -->
+                <junit.version>6.0.3</junit.version>
+            </properties>
+        </profile>
+        <profile>
+            <id>large-tests</id>
+            <properties>
+                <excludedTestGroups>none</excludedTestGroups>
+            </properties>
+        </profile>
+    </profiles>
 </project>
