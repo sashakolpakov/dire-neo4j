@@ -197,6 +197,10 @@ preserve the historical output. Set `spectralTolerance` above zero to enable
 deterministic convergence checks. `spectralMinIterations` defaults to `8`, and
 `spectralMaxIterations` defaults to `160`.
 
+`fastKernel` remains opt-in. It uses a dyadic exponent approximation for the
+force law and can slightly perturb coordinates relative to the default exact
+scalar path.
+
 ## Add A Wide Layout
 
 To compare a stronger separation setting, write a second coordinate pair:
@@ -315,6 +319,16 @@ CALL dire.layout.estimate({
 YIELD nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax
 RETURN nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax;
 ```
+
+## Benchmarking
+
+The repository keeps normal CI lean. The broader fast-kernel benchmark matrix
+is available separately through:
+
+- `scripts/run-fast-kernel-benchmarks.sh`
+- `.github/workflows/fast-kernel-benchmarks.yml` via manual dispatch
+
+Recorded benchmark notes live in `benchmarks/FAST_KERNEL_RESULTS_2026-06-18.md`.
 
 ## Common Problems
 

@@ -44,6 +44,11 @@ No custom release secret is required. The workflow uses the repository
 Release. The runner must be able to start Docker containers and pull the pinned
 Neo4j image used by `scripts/neo4j-smoke.sh`.
 
+The separate fast-kernel benchmark suite is intentionally manual-only. It lives
+behind `.github/workflows/fast-kernel-benchmarks.yml` and the local helper
+`scripts/run-fast-kernel-benchmarks.sh`; it is not part of normal CI or the
+release workflow.
+
 ## Compatibility Note
 
 The release jar is for self-managed Neo4j servers that allow custom plugins.

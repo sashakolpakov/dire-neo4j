@@ -138,3 +138,12 @@ transaction and roll back with it. A positive ``writeBatchSize`` commits
 independent transactions after projection and layout. This bounds transaction
 size but is not atomic, and batch transactions cannot see uncommitted caller
 changes.
+
+Benchmarking Note
+-----------------
+
+``fastKernel`` is intentionally benchmarked through a separate manual suite,
+not as part of the normal pull-request CI path. Use the repository helper
+``scripts/run-fast-kernel-benchmarks.sh`` or the manual workflow-dispatch job
+``.github/workflows/fast-kernel-benchmarks.yml`` when you need the broader
+speedup, drift, and stress matrix.

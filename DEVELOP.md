@@ -216,6 +216,10 @@ Completed implementation slices:
   peak heap, write throughput, numeric/element IDs, and stream embeddings.
   Documented commands cover 70k and manual one-million-node runs; CI has a
   small finite-score/regression-threshold smoke gate.
+- **P4.1c done:** the broader fast-kernel benchmark matrix is documented and
+  runnable through `scripts/run-fast-kernel-benchmarks.sh` or the separate
+  manual workflow `.github/workflows/fast-kernel-benchmarks.yml`. This is
+  intentionally outside normal CI to avoid bloated PR checks.
 - **P4.2 done:** exact golden vectors pin deterministic core output, a
   `large-tests` profile runs a 100k-node layout smoke test, and viewer tests
   assert the built-in payload leaves node/relationship counts unchanged.
@@ -416,6 +420,10 @@ regenerated golden vectors.
   Parameters cover numeric/element IDs, embeddings, and batched writes.
   Documented 70k and ~1M commands remain opt-in; CI runs bounded threshold
   checks at 1k nodes.
+- **P4.1c done - manual fast-kernel matrix.** `FastKernelMatrix` records
+  exact-vs-fast wall time, fitted exponent regimes, drift, and stress deltas.
+  The local wrapper script and separate workflow-dispatch job keep this suite
+  available without making normal CI heavier.
 - **P4.2 done - large-graph + determinism regression tests.** A `large-tests`
   Maven profile enables the 100k-node layout smoke test. Default tests pin exact
   initial/final golden vectors and verify viewer reads do not change graph

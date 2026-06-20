@@ -98,6 +98,16 @@ lists for every streamed row. The scalar coordinate columns are always returned.
 dyadic exponent approximation path for the force law; the default path remains
 the reproducible scalar `Math.pow(...)` kernel.
 
+For broader exact-versus-fast measurements, use the manual benchmark suite in
+the repository:
+
+```sh
+scripts/run-fast-kernel-benchmarks.sh
+```
+
+That suite is separate from normal CI so benchmark coverage stays available
+without turning routine verification into a profiling job.
+
 ## Write
 
 ```cypher

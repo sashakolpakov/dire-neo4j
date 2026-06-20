@@ -3,6 +3,10 @@
 This JMH module measures projection, write throughput, stream materialization,
 and sampled peak-heap growth against an embedded Neo4j database.
 
+It is separate from the manual fast-kernel benchmark suite in `benchmarks/`.
+Normal CI keeps only a small smoke gate; broader fast-kernel speedup and drift
+analysis is intentionally manual.
+
 Build:
 
 ```bash

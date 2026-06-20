@@ -154,6 +154,10 @@ Initial gates should be modest and explicit:
 - Java reference path and optimized path agree within tolerance
 - multi-threaded path is measurably faster before it becomes default
 
+Keep normal CI lean. Broad performance characterization, including the
+fast-kernel matrix and speedup/drift sweeps, should live in separate manual
+benchmark runs rather than every PR check.
+
 ## Regression Rule
 
 Any future optimization, including Java Vector API or native kernels, must first

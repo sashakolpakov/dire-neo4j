@@ -207,6 +207,34 @@ docker run --rm \
 The same command works with a locally built jar if you replace the mounted jar
 path with `neo4j-plugin/target/dire-neo4j-plugin-0.1.0-SNAPSHOT.jar`.
 
+## Performance And Benchmarks
+
+The normal CI workflow keeps only a very small benchmark regression smoke. The
+broader fast-kernel benchmark matrix is intentionally separate so pull-request
+checks stay cheap.
+
+Core JMH benchmarks live in `benchmarks/`. Neo4j-backed projection and write
+benchmarks live in `neo4j-benchmarks/`.
+
+For the opt-in `fastKernel` path, use the manual suite:
+
+```sh
+scripts/run-fast-kernel-benchmarks.sh
+```
+
+That script writes a matrix CSV plus representative JMH slice outputs to
+`benchmarks/fast-kernel-output/`.
+
+The repository also includes a manual GitHub Actions workflow at
+`.github/workflows/fast-kernel-benchmarks.yml`. It is exposed through
+`workflow_dispatch` and is not part of normal CI.
+
+Recorded fast-kernel benchmark results are summarized in:
+
+```text
+benchmarks/FAST_KERNEL_RESULTS_2026-06-18.md
+```
+
 ## Ingest A Dataset
 
 DiRe works on graph topology already stored in Neo4j. For a graph dataset, load

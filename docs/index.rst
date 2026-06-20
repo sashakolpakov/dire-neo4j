@@ -9,6 +9,10 @@ The plugin is meant for self-managed Neo4j servers: install the jar in the
 server ``plugins`` directory, enable the ``dire.*`` procedures, restart Neo4j,
 run the layout from Cypher, and open ``/dire/`` on the Neo4j HTTP port.
 
+Performance and benchmark tooling is available in the repository, but the
+broader fast-kernel benchmark matrix is intentionally a manual workflow rather
+than part of normal CI.
+
 .. toctree::
    :maxdepth: 2
    :caption: User Guide
@@ -31,6 +35,21 @@ Quick Workflow
 4. Open ``http://localhost:7474/dire/``.
 5. Use the viewer's editable Cypher to choose sample size, labels, coordinate
    columns, and edge scope.
+
+Benchmarking Note
+-----------------
+
+The repository ships:
+
+* a small benchmark regression smoke in normal CI;
+* a broader manual fast-kernel benchmark suite through
+  ``scripts/run-fast-kernel-benchmarks.sh``;
+* a separate GitHub Actions workflow,
+  ``.github/workflows/fast-kernel-benchmarks.yml``, exposed through manual
+  dispatch.
+
+The manual suite records exact-vs-fast wall time, fitted exponent regimes,
+coordinate drift, and stress deltas without bloating pull-request checks.
 
 Core Procedure
 --------------

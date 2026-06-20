@@ -72,6 +72,10 @@ power-iteration behavior. Set ``spectralTolerance`` above zero to enable
 deterministic convergence checks. ``spectralMinIterations`` defaults to ``8``,
 and ``spectralMaxIterations`` defaults to ``160``.
 
+``fastKernel`` remains opt-in. It uses a dyadic exponent approximation for the
+force law and can slightly perturb coordinates relative to the default exact
+scalar path.
+
 Wide Variant
 ------------
 
@@ -159,3 +163,11 @@ Estimate Memory
    })
    YIELD nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax
    RETURN nodeCount, relationshipCount, storedRelationshipCount, bytesMin, bytesMax;
+
+Benchmarking
+------------
+
+The repository keeps only a small benchmark smoke in normal CI. The broader
+fast-kernel matrix is available through the manual helper script
+``scripts/run-fast-kernel-benchmarks.sh`` and the separate manual workflow
+``.github/workflows/fast-kernel-benchmarks.yml``.
