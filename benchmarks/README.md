@@ -65,6 +65,19 @@ the shaded jar and run:
 java -cp benchmarks/target/benchmarks.jar org.dire.neo4j.core.FastKernelMatrix
 ```
 
+To run the full manual suite used for the recorded fast-kernel results:
+
+```bash
+scripts/run-fast-kernel-benchmarks.sh
+```
+
+That script writes the matrix CSV and three representative JMH slice outputs to
+`benchmarks/fast-kernel-output/` by default.
+
+There is also a separate manual GitHub Actions workflow,
+`.github/workflows/fast-kernel-benchmarks.yml`, exposed through
+`workflow_dispatch`. It is intentionally not part of normal CI.
+
 The output is CSV with:
 
 - graph size and density inputs

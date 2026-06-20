@@ -17,6 +17,12 @@ Broad matrix with drift and stress deltas:
 java -cp benchmarks/target/benchmarks.jar org.dire.neo4j.core.FastKernelMatrix
 ```
 
+Combined manual suite:
+
+```bash
+scripts/run-fast-kernel-benchmarks.sh
+```
+
 Representative JMH timing slices:
 
 ```bash
@@ -83,3 +89,10 @@ These JMH numbers are materially larger than the simple wall-clock matrix
 speedups, so they should be treated as a separate signal rather than merged
 naively with the ad hoc matrix. They do, however, agree on the main point:
 the approximation path is faster across all three tested exponent regimes.
+
+## CI Policy
+
+This suite is intentionally separate from the normal CI workflow. The standard
+CI job keeps only the existing small benchmark regression smoke; the broader
+fast-kernel matrix and slice runs live behind a manual workflow-dispatch job or
+the local helper script.
