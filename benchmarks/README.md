@@ -53,6 +53,30 @@ such as `-p spectralTolerance=0.0001`.
 Compare exact and approximate force-law paths by varying `-p fastKernel=false`
 and `-p fastKernel=true`.
 
+The benchmark also accepts `-p minDist=...` and `-p spread=...` so you can
+measure different fitted exponent regimes instead of only the default shape.
+
+## Fast Kernel Matrix
+
+For an exact-versus-fast matrix with coordinate drift and stress deltas, build
+the shaded jar and run:
+
+```bash
+java -cp benchmarks/target/benchmarks.jar org.dire.neo4j.core.FastKernelMatrix
+```
+
+The output is CSV with:
+
+- graph size and density inputs
+- `minDist` / `spread`
+- fitted exponent `b`
+- fast-path dyadic approximation exponent
+- exact and fast wall-clock milliseconds
+- speedup percentage
+- initial/final RMS drift
+- max final-coordinate drift
+- exact/fast stress and stress delta percentage
+
 ## Local Scale Runs
 
 The default parameters are deliberately small. Larger runs are opt-in.

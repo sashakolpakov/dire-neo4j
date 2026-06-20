@@ -87,6 +87,12 @@ public class CoreLayoutBenchmark {
         @Param({"1"})
         public int concurrency;
 
+        @Param({"0.01"})
+        public float minDist;
+
+        @Param({"1.0"})
+        public float spread;
+
         @Param({"0.0"})
         public float spectralTolerance;
 
@@ -120,6 +126,8 @@ public class CoreLayoutBenchmark {
         private LayoutConfig.Builder baseConfig() {
             return LayoutConfig.builder()
                     .randomSeed(42L)
+                    .minDist(minDist)
+                    .spread(spread)
                     .negativeSamples(4)
                     .concurrency(concurrency)
                     .spectralTolerance(spectralTolerance)
